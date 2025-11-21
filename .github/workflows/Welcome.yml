@@ -1,0 +1,13 @@
+name: Welcome Bot
+
+on: [pull_request, issues]
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: '👋 Olá! Obrigado por abrir sua primeira Issue no projeto TitanFusion. Nossa comunidade de entusiastas agradece seu feedback! Vamos analisar em breve.'
+          pr-message: '🚀 Uau! Obrigado pela sua primeira contribuição de código! Lembre-se de testar suas alterações em conta DEMO antes de enviar. Vamos revisar seu código em breve.'
