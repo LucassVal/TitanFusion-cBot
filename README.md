@@ -1,83 +1,117 @@
 # TitanFusion cBot (Open Source)
 
-[![Wiki](https://img.shields.io/badge/Documentation-Wiki-blue?style=for-the-badge&logo=read-the-docs)](../../wiki)
-[![Platform](https://img.shields.io/badge/Platform-cTrader-green?style=for-the-badge)](https://ctrader.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+![TitanFusion Banner](https://github.com/LucassVal/TitanFusion-cBot/assets/placeholder-logo.png)
+[![Platform](https://img.shields.io/badge/Platform-cTrader-green?style=flat-square)](https://ctrader.com)
+[![Version](https://img.shields.io/badge/Version-v3.1_Architect-blue?style=flat-square)](releases)
+[![Asset](https://img.shields.io/badge/Asset-XAUUSD_(Gold)-gold?style=flat-square)](https://www.tradingview.com/symbols/XAUUSD/)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square)](LICENSE)
 
-Hybrid Trading Algorithm for cTrader (cAlgo)
-Optimized for XAUUSD (Gold) - H1 Timeframe
+**The "System Architect" Edition.**
+A modular, open-source algorithmic trading system optimized for **XAUUSD (Gold)** on the **H1 Timeframe**.
 
----
-
-## Our Philosophy: Trading for Everyone
-
-Welcome to the TitanFusion Project.
-
-This repository aims to be more than just a collection of code; we are building a welcoming and inclusive community for algorithmic trading enthusiasts.
-
-We believe that algorithmic trading shouldn't be restricted to hedge funds or math PhDs. Whether you are a seasoned C# developer or a trader just starting to explore automation, you are welcome here.
-
-- We are all students: The market humbles everyone. We treat every idea with respect.
-- Collaboration over Competition: We share knowledge freely to beat the market, not each other.
-- Enthusiast Driven: This project is led by passion, not by a corporate agenda.
+> *This is not just a bot; it is a portfolio of strategies working in harmony.*
 
 ---
 
-## Important Disclaimer
+## 🌟 What is TitanFusion?
 
-I am a financial market enthusiast, not a professional programmer.
+TitanFusion is a C# trading robot developed for the cTrader platform. Unlike simple bots that rely on a single indicator, TitanFusion operates as a **Multi-Strategy System**.
 
-This code is the result of my personal studies and testing. It reflects logic that has worked for my specific setup, but it may contain errors or inefficiencies.
+It combines three distinct market approaches (Scalping, Breakout, and Trend Following) and manages them using a sophisticated **Risk Controller** that adapts exposure based on how many strategies are active.
 
-- Do NOT use real money without extensive testing on a DEMO account.
-- The code is provided "as is", without any warranty.
-- I invite you to fork, fix, and improve this bot. The goal is to learn together.
-
----
-
-## Strategy Overview (Fusion v2.5)
-
-TitanFusion combines three classic strategies, protected by a "Chaos Guard" volatility filter.
-
-### 1. Scalper (RSI)
-Seeks mean reversion opportunities. It enters trades when the RSI indicates overbought or oversold conditions, confirming the entry only after the candle closes to avoid false signals.
-
-### 2. Breakout (Bollinger Bands)
-Capitalizes on volatility. It monitors for "squeezes" (low volatility) and triggers an entry when the price breaks out with momentum and strong candle body structure.
-
-### 3. Pullback (Trend Following)
-Respects the macro trend (H1). It uses Exponential Moving Averages (EMAs) to determine direction and buys the dips when RSI indicates a temporary correction.
+### The "Architect" Philosophy (v3.1)
+Version 3.1 introduces the **Modular Strategy Controller**. This allows traders to:
+1.  **Isolate & Test:** Run specifically just the "Scalper" or just the "Breakout" to verify performance.
+2.  **Combine & Conquer:** Run all strategies together with **Risk Dampening** (automatic volume reduction) to prevent over-leverage.
 
 ---
 
-## Key Features
+## 🧠 Core Strategies
 
-- **Chaos Guard:** Automatically pauses trading if market volatility (ATR) exceeds safe levels (e.g., during war news or economic releases).
-- **Auto-Compound:** Built-in money management that adjusts trade size based on account equity.
-- **Timezone Lock:** Hardcoded to operate strictly during high-volume sessions (London & New York overlap) to avoid high spreads.
-- **Optimization Ready:** Includes a custom fitness function that prioritizes a high Sharpe Ratio and low Drawdown.
+### 1. The Scalper (Mean Reversion)
+* **Logic:** Prices rarely move in a straight line. This module exploits overbought/oversold conditions using RSI.
+* **Entry:** RSI (14) crossing back from extremes (70/30).
+* **Safety:** Uses a tight stop and only enters after candle close (`OnBar`) to avoid "falling knives".
 
----
+### 2. The Breakout (Volatility)
+* **Logic:** Capitalizes on volatility explosions after periods of calm (Squeeze).
+* **Entry:** Price closes outside Bollinger Bands with a strong candle body.
+* **Filter:** Checks `BandWidth` to ensure the market was consolidated before the explosion.
 
-## Installation Guide
-
-1. Download the `.cs` source code file from this repository.
-2. Open **cTrader Desktop**.
-3. Navigate to the **Automate** tab.
-4. Click on **New cBot**.
-5. Paste the TitanFusion code into the editor and click **Build**.
-6. Add an instance to an **XAUUSD (Gold)** chart on the **H1** timeframe.
-
-> 📚 **Need detailed instructions?** [Click here to read the full Wiki](../../wiki)
+### 3. The Pullback (Trend Following)
+* **Logic:** "The Trend is your friend". Buys dips in an uptrend and sells rallies in a downtrend.
+* **Entry:** * Trend defined by Fast/Slow EMAs (34/144).
+    * Triggered when RSI dips into a "value zone" (e.g., 40-45) during a trend.
 
 ---
 
-## Join the Community & Contribute
+## 🛡️ Advanced Protection Systems
 
-We strongly encourage you to participate! You don't need to be an expert coder to help.
+### 🌪️ Chaos Guard (Volatility Circuit Breaker)
+Before every trade, the bot checks market violence using ATR (Average True Range).
+* **If ATR > Max Limit (120 pips):** The market is in "News/Panic Mode". The bot **PAUSES** instantly to protect capital.
 
-- Have an idea? Open a **Discussion** tab to chat about strategy improvements.
-- Found a bug? Open an **Issue** so we can fix it.
-- Optimized parameters? Share your `.cbotset` or backtest results with us.
+### ⚖️ Smart Risk Dampening (v3.1 Exclusive)
+The bot automatically adjusts position sizing based on the active mode:
+* **Single Strategy Mode:** Uses 100% of `RiskPerTrade`.
+* **All Strategies Mode:** Automatically reduces volume by **40%** to allow multiple positions without blowing up the margin.
 
-Let's democratize algorithmic trading, one line of code at a time.
+### 🔒 Timezone Lock & H1 Trend Filter
+* **Hardcoded Hours:** Trades only during liquid sessions (London/NY Overlap: 07:00 - 20:00 UTC).
+* **Trend Filter:** Forces the Scalper and Breakout to respect the H1 Macro Trend (optional but recommended).
+
+---
+
+## 🎮 Operation Modes (New in v3.1)
+
+You can now select the `Operation Mode` in the parameters:
+
+| Mode | Description | Use Case |
+| :--- | :--- | :--- |
+| **All (Default)** | Runs Scalper + Breakout + Pullback. | **Live Trading.** Uses Risk Dampening logic. |
+| **ScalperOnly** | Runs only RSI logic. | **Optimization:** Tune RSI period/levels. |
+| **BreakoutOnly** | Runs only BB logic. | **Optimization:** Tune Deviation/Squeeze. |
+| **PullbackOnly** | Runs only Trend logic. | **Optimization:** Tune EMAs. |
+| **Combinations** | e.g., `ScalperBreakout`. | **Testing:** Checking correlation between pairs. |
+
+---
+
+## ⚙️ Installation & Setup
+
+### Prerequisites
+* **Platform:** cTrader Desktop (v4.8+ recommended).
+* **Account:** Hedging Account (Required for multi-strategy).
+* **Symbol:** XAUUSD (Gold).
+* **Timeframe:** H1 (1 Hour).
+
+### How to Install
+1.  Download the `TitanFusion_v3.1.cs` file from [Releases](../../releases).
+2.  Open cTrader and go to the **Automate** tab.
+3.  Click **New cBot**, delete the sample code, and paste the TitanFusion code.
+4.  Click **Build**.
+5.  Add to an **XAUUSD H1** chart.
+
+---
+
+## 📊 Default Parameters (Gold Optimized)
+
+The bot comes pre-configured with settings optimized for Gold volatility:
+
+* **Risk Per Trade:** 1.5% (Conservative start).
+* **Min Volatility:** 15 pips (Avoids dead markets).
+* **Max Volatility:** 120 pips (Avoids non-farm payroll spikes).
+* **Max Spread:** 8.0 pips (Gold standard).
+
+> **Note:** Always optimize parameters for your specific broker's data feed using the "ScalperOnly", "BreakoutOnly", etc., modes separately before running "All".
+
+---
+
+## 🤝 Disclaimer & Community
+
+**TitanFusion is an enthusiast project.** I am not a financial advisor. This code is shared for educational purposes.
+
+* **Risk Warning:** Trading Gold involves significant risk. Never trade with money you cannot afford to lose.
+* **No Warranty:** The software is provided "as is".
+* **Community:** Found a bug? Have an idea? Open an [Issue](../../issues) or join the [Discussion](../../discussions).
+
+**Let's democratize algorithmic trading.** 🚀
