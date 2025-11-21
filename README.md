@@ -1,7 +1,13 @@
 # TitanFusion cBot (Open Source)
 
+[![Wiki](https://img.shields.io/badge/Documentation-Wiki-blue?style=for-the-badge&logo=read-the-docs)](../../wiki)
+[![Platform](https://img.shields.io/badge/Platform-cTrader-green?style=for-the-badge)](https://ctrader.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
 Hybrid Trading Algorithm for cTrader (cAlgo)
 Optimized for XAUUSD (Gold) - H1 Timeframe
+
+---
 
 ## Our Philosophy: Trading for Everyone
 
@@ -46,21 +52,23 @@ Respects the macro trend (H1). It uses Exponential Moving Averages (EMAs) to det
 
 ## Key Features
 
-- Chaos Guard: Automatically pauses trading if market volatility (ATR) exceeds safe levels (e.g., during war news or economic releases).
-- Auto-Compound: Built-in money management that adjusts trade size based on account equity.
-- Timezone Lock: Hardcoded to operate strictly during high-volume sessions (London & New York overlap) to avoid high spreads.
-- Optimization Ready: Includes a custom fitness function that prioritizes a high Sharpe Ratio and low Drawdown.
+- **Chaos Guard:** Automatically pauses trading if market volatility (ATR) exceeds safe levels (e.g., during war news or economic releases).
+- **Auto-Compound:** Built-in money management that adjusts trade size based on account equity.
+- **Timezone Lock:** Hardcoded to operate strictly during high-volume sessions (London & New York overlap) to avoid high spreads.
+- **Optimization Ready:** Includes a custom fitness function that prioritizes a high Sharpe Ratio and low Drawdown.
 
 ---
 
 ## Installation Guide
 
-1. Download the .cs source code file from this repository.
-2. Open cTrader Desktop.
-3. Navigate to the Automate tab.
-4. Click on New cBot.
-5. Paste the TitanFusion code into the editor and click Build.
-6. Add an instance to an XAUUSD (Gold) chart on the H1 timeframe.
+1. Download the `.cs` source code file from this repository.
+2. Open **cTrader Desktop**.
+3. Navigate to the **Automate** tab.
+4. Click on **New cBot**.
+5. Paste the TitanFusion code into the editor and click **Build**.
+6. Add an instance to an **XAUUSD (Gold)** chart on the **H1** timeframe.
+
+> 📚 **Need detailed instructions?** [Click here to read the full Wiki](../../wiki)
 
 ---
 
@@ -68,8 +76,8 @@ Respects the macro trend (H1). It uses Exponential Moving Averages (EMAs) to det
 
 We strongly encourage you to participate! You don't need to be an expert coder to help.
 
-- Have an idea? Open a "Discussion" tab to chat about strategy improvements.
-- Found a bug? Open an "Issue" so we can fix it.
-- Optimized parameters? Share your .cbotset or backtest results with us.
+- Have an idea? Open a **Discussion** tab to chat about strategy improvements.
+- Found a bug? Open an **Issue** so we can fix it.
+- Optimized parameters? Share your `.cbotset` or backtest results with us.
 
 Let's democratize algorithmic trading, one line of code at a time.
