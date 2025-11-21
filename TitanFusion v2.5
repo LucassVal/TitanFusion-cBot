@@ -1,0 +1,527 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using cAlgo.API;
+using cAlgo.API.Indicators;
+using cAlgo.API.Internals;
+
+namespace cAlgo.Robots
+{
+    // Enum for Moving Average Type selection
+    public enum TitanMAType { Simple, Exponential, Weighted }
+
+    // 🔒 TIMEZONE LOCK:
+    // We force the robot to run on UTC (Universal Time).
+    // This ensures that 08:00 is always London Open, regardless of the user's broker server time.
+    [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
+    public class TitanFusion_v2_5 : Robot
+    {
+        // =============================================================================
+        // 1. MONEY & RISK MANAGEMENT
+        // =============================================================================
+        #region 1. Money & Risk Management
+        
+        [Parameter("💰 Use Auto-Compound?", Group = "1. Money Management", DefaultValue = true, Description = "If true, lot size increases with equity.")]
+        public bool EnableAutoCompound { get; set; }
+
+        [Parameter("📊 Risk % Per Trade", Group = "1. Money Management", DefaultValue = 3.0, MinValue = 0.1, Step = 0.1, Description = "Percentage of balance to risk per trade.")]
+        public double RiskPerTrade { get; set; }
+
+        [Parameter("🛑 Max Daily Drawdown (%)", Group = "1. Money Management", DefaultValue = 20, MinValue = 1, Description = "Stops trading if daily loss exceeds this %.")]
+        public double DailyStopPercent { get; set; }
+
+        [Parameter("🎯 Daily Target (%)", Group = "1. Money Management", DefaultValue = 10, MinValue = 1, Description = "Stops trading if daily profit hits this %.")]
+        public double DailyTargetPercent { get; set; }
+
+        [Parameter("🛡️ Enable Profit Shield?", Group = "1. Money Management", DefaultValue = true, Description = "Locks daily profit if a certain threshold is met.")]
+        public bool EnableProfitShield { get; set; }
+        #endregion
+
+        // =============================================================================
+        // 2. SMART EXITS (Trailing & Partial)
+        // =============================================================================
+        #region 2. Smart Exits
+        
+        [Parameter("🏃 Enable Trailing SAR?", Group = "2. Smart Exits", DefaultValue = true, Description = "Moves SL following the Parabolic SAR indicator.")]
+        public bool TrailingSarEnabled { get; set; }
+
+        [Parameter("SAR Min AF", Group = "2. Smart Exits", DefaultValue = 0.02)]
+        public double SarMinAF { get; set; }
+
+        [Parameter("SAR Max AF", Group = "2. Smart Exits", DefaultValue = 0.2)]
+        public double SarMaxAF { get; set; }
+
+        [Parameter("🔒 Enable Partial TP?", Group = "2. Smart Exits", DefaultValue = true, Description = "Closes 50% of the position when profit is reached.")]
+        public bool PartialTpEnabled { get; set; }
+
+        [Parameter("🔒 Partial Trigger (ATR Multi)", Group = "2. Smart Exits", DefaultValue = 1.0, Description = "Distance in ATR to trigger partial close.")]
+        public double PartialTpAtrMultiplier { get; set; }
+        #endregion
+
+        // =============================================================================
+        // 3. FILTERS & VISUALS
+        // =============================================================================
+        #region 3. Filters & Visual
+        
+        [Parameter("🖥️ Show Text Info?", Group = "3. Filters & Visual", DefaultValue = true, Description="Show status text on chart. Disable for faster optimization.")]
+        public bool ShowPanel { get; set; }
+
+        [Parameter("🌊 Min Volatility (ATR Pips)", Group = "3. Filters & Visual", DefaultValue = 3, Description = "Minimum movement required to trade.")]
+        public double MinAtrPips { get; set; }
+
+        [Parameter("🛡️ Max Spread (Pips)", Group = "3. Filters & Visual", DefaultValue = 3.5, Description = "Maximum allowed spread cost.")]
+        public double MaxSpread { get; set; }
+
+        [Parameter("🦁 Enable H1 Trend Filter?", Group = "3. Filters & Visual", DefaultValue = true, Description = "Only trades in direction of H1 Trend.")]
+        public bool EnableTrendFilterH1 { get; set; }
+        #endregion
+
+        // =============================================================================
+        // 4. CHAOS GUARD (Safety Mechanism)
+        // =============================================================================
+        #region 4. Chaos Guard
+        
+        [Parameter("🌪️ Max Volatility (ATR Pips)", Group = "4. Chaos Guard", DefaultValue = 50.0, Description = "Pauses trading during news/crashes.")]
+        public double MaxAtrPips { get; set; }
+
+        [Parameter("🦀 Flat Market Protection (Pips)", Group = "4. Chaos Guard", DefaultValue = 2.0, Description = "Avoids trading if Moving Averages are flat/overlapping.")]
+        public double FlatMarketPips { get; set; }
+        #endregion
+
+        // =============================================================================
+        // 5. OPTIMIZATION WEIGHTS (Fitness Function)
+        // =============================================================================
+        #region 5. Fitness Weights
+        
+        [Parameter("📉 Min Trades/Month", Group = "5. Fitness Weights", DefaultValue = 5, Description = "For Early Stopping during optimization.")]
+        public double TargetTradesPerMonth { get; set; }
+
+        [Parameter("⚖️ Weight: Net Profit", Group = "5. Fitness Weights", DefaultValue = 1.0)]
+        public double WeightProfit { get; set; }
+
+        [Parameter("⚖️ Weight: Drawdown", Group = "5. Fitness Weights", DefaultValue = 0.5)]
+        public double WeightDrawdown { get; set; }
+
+        [Parameter("⚖️ Weight: Win Rate", Group = "5. Fitness Weights", DefaultValue = 0.2)]
+        public double WeightWinRate { get; set; }
+        
+        [Parameter("⚖️ Weight: Sharpe", Group = "5. Fitness Weights", DefaultValue = 0.3)]
+        public double WeightSharpe { get; set; }
+        #endregion
+
+        // =============================================================================
+        // A. STRATEGY: SCALPER (Mean Reversion)
+        // =============================================================================
+        #region A. Strategy: Scalper
+        [Parameter("⚡ Enable Scalper?", Group = "A. Strategy: Scalper", DefaultValue = true)]
+        public bool EnableScalperRSI { get; set; }
+        [Parameter("📦 Base Volume (Scalper)", Group = "A. Strategy: Scalper", DefaultValue = 0.01)]
+        public double ScalperFixedVolume { get; set; }
+        [Parameter("📊 RSI Period", Group = "A. Strategy: Scalper", DefaultValue = 14)]
+        public int ScalperRSIPeriod { get; set; }
+        [Parameter("🔵 Oversold Level", Group = "A. Strategy: Scalper", DefaultValue = 30)]
+        public int RsiOversold { get; set; }
+        [Parameter("🔴 Overbought Level", Group = "A. Strategy: Scalper", DefaultValue = 70)]
+        public int RsiOverbought { get; set; }
+        [Parameter("🎯 Scalper TP (ATR Multi)", Group = "A. Strategy: Scalper", DefaultValue = 2.5)]
+        public double ScalperTpAtr { get; set; } 
+        [Parameter("🛑 Scalper SL (ATR Multi)", Group = "A. Strategy: Scalper", DefaultValue = 1.5)] 
+        public double ScalperSlAtr { get; set; }
+        #endregion
+
+        // =============================================================================
+        // B. STRATEGY: BREAKOUT (Volatility)
+        // =============================================================================
+        #region B. Strategy: Breakout
+        [Parameter("💥 Enable Breakout?", Group = "B. Strategy: Breakout", DefaultValue = true)]
+        public bool EnableBreakoutBB { get; set; }
+        [Parameter("📦 Base Volume (Breakout)", Group = "B. Strategy: Breakout", DefaultValue = 0.01)]
+        public double BreakoutFixedVolume { get; set; }
+        [Parameter("📊 BB Period", Group = "B. Strategy: Breakout", DefaultValue = 20)]
+        public int BBPeriod { get; set; }
+        [Parameter("📏 BB Deviation", Group = "B. Strategy: Breakout", DefaultValue = 2.0)]
+        public double BBDeviation { get; set; }
+        [Parameter("⚠️ Max Band Width (Pips)", Group = "B. Strategy: Breakout", DefaultValue = 50.0, Description = "Avoid entering if bands are already too wide.")]
+        public double BreakoutMaxBandWidth { get; set; }
+        [Parameter("🕯️ Min Body Ratio (0.1 - 1.0)", Group = "B. Strategy: Breakout", DefaultValue = 0.6, Description = "Requires strong candle body to confirm breakout.")]
+        public double MinBodyRatio { get; set; }
+        [Parameter("🎯 Breakout TP (ATR Multi)", Group = "B. Strategy: Breakout", DefaultValue = 4.0)] 
+        public double BreakoutTpAtr { get; set; }
+        [Parameter("🛑 Breakout SL (ATR Multi)", Group = "B. Strategy: Breakout", DefaultValue = 1.5)] 
+        public double BreakoutSlAtr { get; set; }
+        #endregion
+
+        // =============================================================================
+        // C. STRATEGY: PULLBACK (Trend Following)
+        // =============================================================================
+        #region C. Strategy: Pullback
+        [Parameter("🌊 Enable Pullback?", Group = "C. Strategy: Pullback", DefaultValue = true)]
+        public bool EnablePullback { get; set; }
+        [Parameter("📦 Base Volume (Pullback)", Group = "C. Strategy: Pullback", DefaultValue = 0.01)]
+        public double PullbackFixedVolume { get; set; }
+        [Parameter("📈 Trend EMA Fast", Group = "C. Strategy: Pullback", DefaultValue = 50)]
+        public int TrendEmaFast { get; set; }
+        [Parameter("📉 Trend EMA Slow", Group = "C. Strategy: Pullback", DefaultValue = 200)]
+        public int TrendEmaSlow { get; set; }
+        [Parameter("📉 Pullback RSI Trigger", Group = "C. Strategy: Pullback", DefaultValue = 45)]
+        public int PullbackRsiTrigger { get; set; }
+        [Parameter("🎯 Pullback TP (ATR Multi)", Group = "C. Strategy: Pullback", DefaultValue = 3.0)]
+        public double PullbackTpAtr { get; set; }
+        [Parameter("🛑 Pullback SL (ATR Multi)", Group = "C. Strategy: Pullback", DefaultValue = 1.5)]
+        public double PullbackSlAtr { get; set; }
+        #endregion
+
+        // =============================================================================
+        // INDICATOR DECLARATIONS
+        // =============================================================================
+        private RelativeStrengthIndex _rsiScalper;
+        private RelativeStrengthIndex _rsiPullback;
+        private MovingAverage _trendEmaFast; 
+        private MovingAverage _trendEmaSlow; 
+        private BollingerBands _bollingerBands;
+        private ParabolicSAR _parabolicSAR;
+        private AverageTrueRange _atr;
+        
+        // MTF (Multi-Timeframe) Indicators - Specifically for H1 Analysis
+        private MovingAverage _emaH1Fast;
+        private MovingAverage _emaH1Slow;
+
+        // Internal State Variables
+        private double _initialBalance;
+        private DateTime _startTime;
+        private List<string> _partiallyClosedPositions = new List<string>(); // Tracks positions that already took partial profit
+        private int _totalTradesCount = 0;
+
+        // 🔒 HARDCODED TRADING HOURS (London Open to NY Mid-Session)
+        // UTC 08:00 to 18:00
+        private const int FIXED_START_HOUR = 8;  
+        private const int FIXED_END_HOUR = 18;   
+
+        // Initialization Method (Runs once when bot starts)
+        protected override void OnStart()
+        {
+            _initialBalance = Account.Balance;
+            _startTime = Server.Time;
+            
+            InitializeIndicators();
+            
+            // Subscribe to events
+            Positions.Closed += OnPositionClosed;
+            Positions.Opened += OnPositionOpened;
+        }
+
+        // Setup all indicators with user parameters
+        private void InitializeIndicators()
+        {
+            // ATR is crucial for dynamic Stops/Targets
+            _atr = Indicators.AverageTrueRange(14, MovingAverageType.Simple);
+            
+            if (EnableScalperRSI) _rsiScalper = Indicators.RelativeStrengthIndex(Bars.ClosePrices, ScalperRSIPeriod);
+            
+            if (EnableBreakoutBB) 
+                _bollingerBands = Indicators.BollingerBands(Bars.ClosePrices, BBPeriod, BBDeviation, MovingAverageType.Simple);
+
+            _trendEmaFast = Indicators.MovingAverage(Bars.ClosePrices, TrendEmaFast, MovingAverageType.Exponential);
+            _trendEmaSlow = Indicators.MovingAverage(Bars.ClosePrices, TrendEmaSlow, MovingAverageType.Exponential);
+
+            if (EnablePullback) _rsiPullback = Indicators.RelativeStrengthIndex(Bars.ClosePrices, 14);
+            
+            if (TrailingSarEnabled) _parabolicSAR = Indicators.ParabolicSAR(SarMinAF, SarMaxAF);
+            
+            // Initialize H1 Trend Filters if enabled
+            if (EnableTrendFilterH1)
+            {
+                // We load H1 bars regardless of the timeframe the bot is running on
+                var h1Bars = MarketData.GetBars(TimeFrame.Hour);
+                _emaH1Fast = Indicators.MovingAverage(h1Bars.ClosePrices, 20, MovingAverageType.Exponential);
+                _emaH1Slow = Indicators.MovingAverage(h1Bars.ClosePrices, 50, MovingAverageType.Exponential);
+            }
+        }
+
+        // Main Logic Loop (Runs every time a candle CLOSES)
+        // Using OnBar prevents repainting issues seen in OnTick strategies.
+        protected override void OnBar()
+        {
+            // 1. EARLY STOPPING (For Optimization Speed)
+            // If 30 days passed and trade count is low, stop the bot to save CPU time.
+            double daysRunning = (Server.Time - _startTime).TotalDays;
+            if (daysRunning >= 30.0) 
+            {
+                double monthsRunning = daysRunning / 30.0;
+                double currentRate = _totalTradesCount / monthsRunning;
+                if (currentRate < TargetTradesPerMonth) Stop();
+            }
+
+            // 2. DAILY PROFIT/LOSS MANAGEMENT
+            // Resets relative to the initial balance of the session.
+            double dailyPL = Account.Equity - _initialBalance; 
+            double targetMoney = _initialBalance * (DailyTargetPercent / 100.0);
+            double lossLimit = _initialBalance * (DailyStopPercent / 100.0);
+            
+            // Safety check: If target reached or max loss hit, skip logic.
+            if (dailyPL >= targetMoney || dailyPL <= -lossLimit) return;
+
+            // 3. GLOBAL FILTERS
+            if (!IsTradingAllowed()) return; // Check Time, Spread, Min Volatility
+            if (IsMarketTooCrazy()) return;  // Check Max Volatility (Chaos Guard)
+            bool isFlat = IsMarketFlat();    // Check if MAs are overlapping
+            
+            // 4. MULTI-TIMEFRAME TREND CHECK
+            bool h1Bullish = true; 
+            bool h1Bearish = true;
+            if (EnableTrendFilterH1)
+            {
+                // Using Last(1) ensures we look at the closed H1 candle
+                double fast = _emaH1Fast.Result.Last(1);
+                double slow = _emaH1Slow.Result.Last(1);
+                h1Bullish = fast > slow;
+                h1Bearish = fast < slow;
+            }
+
+            // 5. STRATEGY EXECUTION
+            // Scalper runs even in flat markets (mean reversion)
+            if (EnableScalperRSI) ProcessScalperEntry(h1Bullish, h1Bearish);
+            
+            // Breakout and Pullback require trend (Non-Flat market)
+            if (!isFlat) 
+            {
+                if (EnableBreakoutBB) ProcessBreakoutEntry(h1Bullish, h1Bearish);
+                if (EnablePullback) ProcessPullbackEntry(h1Bullish, h1Bearish);
+            }
+            
+            // 6. VISUALS
+            if(ShowPanel) DrawSimpleText();
+        }
+
+        // Runs on every price tick (Used only for Trailing Stop & Partial Close)
+        protected override void OnTick()
+        {
+            if (Positions.Count > 0) ManagePositions();
+        }
+
+        // =============================================================================
+        // CUSTOM FITNESS FUNCTION (Optimization Logic)
+        // =============================================================================
+        protected override double GetFitness(GetFitnessArgs args)
+        {
+            // Calculates a custom score for cTrader optimization
+            // Penalizes Drawdown heavily and rewards Stability (Sharpe)
+            
+            double netProfit = args.NetProfit;
+            double winRate = args.WinningTrades / (args.TotalTrades + 1.0);
+            double drawdown = args.MaxEquityDrawdown;
+            double sharpe = args.SharpeRatio;
+
+            double score = (netProfit * WeightProfit) 
+                         - (drawdown * WeightDrawdown * 5.0) 
+                         + (winRate * WeightWinRate * 1000) 
+                         + (sharpe * WeightSharpe * 100);
+
+            return score;
+        }
+
+        // =============================================================================
+        // HELPER METHODS
+        // =============================================================================
+
+        private void DrawSimpleText()
+        {
+            string status = IsTradingAllowed() ? "Active" : "Standby";
+            double vol = _atr.Result.Last(1) / Symbol.PipSize;
+            string text = $"TITAN v2.5 | Equity: {Account.Equity:F2} | Status: {status} | Vol: {vol:F1} pips";
+            // Draws yellow text on top-left
+            Chart.DrawStaticText("simple_info", text, VerticalAlignment.Top, HorizontalAlignment.Left, Color.Yellow);
+        }
+
+        private bool IsTradingAllowed()
+        {
+            // 1. Time Check (Hardcoded UTC 08-18)
+            int currentHour = Server.Time.Hour;
+            if (currentHour < FIXED_START_HOUR || currentHour >= FIXED_END_HOUR) return false;
+            
+            // 2. Min Volatility Check (Avoid dead markets)
+            if ((_atr.Result.Last(1) / Symbol.PipSize) < MinAtrPips) return false;
+            
+            // 3. Max Spread Check (Cost protection)
+            if ((Symbol.Spread / Symbol.PipSize) > MaxSpread) return false;
+            
+            return true;
+        }
+
+        // Chaos Guard: Returns true if market is moving too violently (News/Crash)
+        private bool IsMarketTooCrazy()
+        {
+            return (_atr.Result.Last(1) / Symbol.PipSize) > MaxAtrPips;
+        }
+
+        // Returns true if Moving Averages are too close (Sideways market)
+        private bool IsMarketFlat()
+        {
+            double fast = _trendEmaFast.Result.Last(1);
+            double slow = _trendEmaSlow.Result.Last(1);
+            // Compare difference against user threshold
+            return (Math.Abs(fast - slow) / Symbol.PipSize) < FlatMarketPips;
+        }
+
+        // =============================================================================
+        // STRATEGY LOGIC BLOCKS
+        // =============================================================================
+
+        private void ProcessScalperEntry(bool allowBuy, bool allowSell)
+        {
+            if (Positions.Count(p => p.Label == "SCALPER") >= 1) return;
+            
+            // Use index 1 (Last closed candle) to prevent repainting
+            double currentRsi = _rsiScalper.Result.Last(1);
+            double prevRsi = _rsiScalper.Result.Last(2);
+            
+            // Dynamic SL/TP based on ATR
+            double atr = _atr.Result.Last(1);
+            double slPips = (atr * ScalperSlAtr) / Symbol.PipSize;
+            double tpPips = (atr * ScalperTpAtr) / Symbol.PipSize;
+            double vol = CalculateVolume(slPips, "SCALPER");
+
+            // Logic: RSI crosses back from Oversold/Overbought
+            if (prevRsi <= RsiOversold && currentRsi > RsiOversold && allowBuy)
+            {
+                if (!HasOppositePosition(TradeType.Buy)) 
+                    ExecuteMarketOrder(TradeType.Buy, SymbolName, vol, "SCALPER", slPips, tpPips);
+            }
+            else if (prevRsi >= RsiOverbought && currentRsi < RsiOverbought && allowSell)
+            {
+                if (!HasOppositePosition(TradeType.Sell)) 
+                    ExecuteMarketOrder(TradeType.Sell, SymbolName, vol, "SCALPER", slPips, tpPips);
+            }
+        }
+
+        private void ProcessBreakoutEntry(bool allowBuy, bool allowSell)
+        {
+            if (Positions.Count(p => p.Label == "BREAKOUT") >= 1) return;
+            
+            double top = _bollingerBands.Top.Last(1);
+            double bottom = _bollingerBands.Bottom.Last(1);
+            double close = Bars.ClosePrices.Last(1);
+            double open = Bars.OpenPrices.Last(1);
+            
+            // Filter 1: Squeeze (Bands must be tight enough)
+            if ((top - bottom) / Symbol.PipSize > BreakoutMaxBandWidth) return;
+            
+            // Filter 2: Candle Quality (Avoid large wicks/dojis)
+            double totalSize = Bars.HighPrices.Last(1) - Bars.LowPrices.Last(1);
+            if (totalSize > 0 && (Math.Abs(close - open) / totalSize) < MinBodyRatio) return;
+
+            double atr = _atr.Result.Last(1);
+            double slPips = (atr * BreakoutSlAtr) / Symbol.PipSize;
+            double tpPips = (atr * BreakoutTpAtr) / Symbol.PipSize;
+            double vol = CalculateVolume(slPips, "BREAKOUT");
+
+            if (close > top && allowBuy)
+            {
+                if (!HasOppositePosition(TradeType.Buy)) 
+                    ExecuteMarketOrder(TradeType.Buy, SymbolName, vol, "BREAKOUT", slPips, tpPips);
+            }
+            else if (close < bottom && allowSell)
+            {
+                if (!HasOppositePosition(TradeType.Sell)) 
+                    ExecuteMarketOrder(TradeType.Sell, SymbolName, vol, "BREAKOUT", slPips, tpPips);
+            }
+        }
+        
+        private void ProcessPullbackEntry(bool allowBuy, bool allowSell)
+        {
+            if (Positions.Count(p => p.Label == "PULLBACK") >= 1) return;
+            
+            double rsi = _rsiPullback.Result.Last(1);
+            bool isUptrend = _trendEmaFast.Result.Last(1) > _trendEmaSlow.Result.Last(1);
+            bool isDowntrend = _trendEmaFast.Result.Last(1) < _trendEmaSlow.Result.Last(1);
+            
+            double atr = _atr.Result.Last(1);
+            double slPips = (atr * PullbackSlAtr) / Symbol.PipSize;
+            double tpPips = (atr * PullbackTpAtr) / Symbol.PipSize;
+            double vol = CalculateVolume(slPips, "PULLBACK");
+
+            // Logic: Trend + RSI Dip
+            if (isUptrend && rsi < PullbackRsiTrigger && allowBuy)
+            {
+                if (!HasOppositePosition(TradeType.Buy)) 
+                    ExecuteMarketOrder(TradeType.Buy, SymbolName, vol, "PULLBACK", slPips, tpPips);
+            }
+            else if (isDowntrend && rsi > (100 - PullbackRsiTrigger) && allowSell)
+            {
+                if (!HasOppositePosition(TradeType.Sell)) 
+                    ExecuteMarketOrder(TradeType.Sell, SymbolName, vol, "PULLBACK", slPips, tpPips);
+            }
+        }
+
+        // Calculates Dynamic Lot Size based on Risk% and Stop Loss distance
+        private double CalculateVolume(double stopLossPips, string strategy)
+        {
+            if (stopLossPips <= 0) stopLossPips = 10; // Safety fallback
+            
+            // If Auto-Compound is OFF, use fixed volume
+            if (!EnableAutoCompound) 
+                return Symbol.QuantityToVolumeInUnits(strategy == "SCALPER" ? ScalperFixedVolume : 0.01);
+            
+            // Risk Multiplier per strategy (Pullback is safer, so slightly more risk allowed)
+            double multiplier = strategy switch { "SCALPER" => 0.8, "BREAKOUT" => 1.0, "PULLBACK" => 1.2, _ => 1.0 };
+            
+            double riskAmount = Account.Balance * (RiskPerTrade / 100.0) * multiplier;
+            double volumeInUnits = riskAmount / (stopLossPips * Symbol.PipSize);
+            
+            return Symbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
+        }
+
+        private bool HasOppositePosition(TradeType direction)
+        {
+            var oppositeType = direction == TradeType.Buy ? TradeType.Sell : TradeType.Buy;
+            return Positions.Any(p => p.SymbolName == SymbolName && p.TradeType == oppositeType);
+        }
+
+        // Manages Open Positions (Trailing Stop & Partial TP)
+        private void ManagePositions()
+        {
+            double atr = _atr.Result.Last(1);
+            foreach (var position in Positions.ToList())
+            {
+                if (position.SymbolName != SymbolName) continue;
+                
+                // 1. Partial Take Profit
+                if (PartialTpEnabled && !_partiallyClosedPositions.Contains(position.Id.ToString()))
+                {
+                    double partialTriggerPips = (atr * PartialTpAtrMultiplier) / Symbol.PipSize;
+                    if (position.Pips >= partialTriggerPips)
+                    {
+                        ClosePosition(position, position.VolumeInUnits * 0.5);
+                        // Move SL to Breakeven + 2 Pips
+                        double breakeven = position.EntryPrice;
+                        if (position.TradeType == TradeType.Buy && Symbol.Bid > breakeven + 2 * Symbol.PipSize) 
+                            ModifyPosition(position, breakeven, position.TakeProfit);
+                        else if (position.TradeType == TradeType.Sell && Symbol.Ask < breakeven - 2 * Symbol.PipSize) 
+                            ModifyPosition(position, breakeven, position.TakeProfit);
+                            
+                        _partiallyClosedPositions.Add(position.Id.ToString());
+                    }
+                }
+                
+                // 2. Trailing Stop (Parabolic SAR)
+                if (TrailingSarEnabled)
+                {
+                    double sar = _parabolicSAR.Result.LastValue;
+                    // Only move SL if SAR is favorable (never loosen the stop)
+                    if (position.TradeType == TradeType.Buy && sar > position.StopLoss) 
+                        ModifyPosition(position, sar, position.TakeProfit);
+                    else if (position.TradeType == TradeType.Sell && sar < position.StopLoss) 
+                        ModifyPosition(position, sar, position.TakeProfit);
+                }
+            }
+        }
+        
+        private void OnPositionOpened(PositionOpenedEventArgs args) { _totalTradesCount++; }
+        private void OnPositionClosed(PositionClosedEventArgs args)
+        {
+            // Clean up list when position closes fully
+            if (_partiallyClosedPositions.Contains(args.Position.Id.ToString())) 
+                _partiallyClosedPositions.Remove(args.Position.Id.ToString());
+        }
+    }
+}
