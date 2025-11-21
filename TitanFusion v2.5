@@ -14,7 +14,7 @@ namespace cAlgo.Robots
     // We force the robot to run on UTC (Universal Time).
     // This ensures that 08:00 is always London Open, regardless of the user's broker server time.
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-    public class TitanFusion_v2_5 : Robot
+    public class TitanFusion_v2_6 : Robot
     {
         // =============================================================================
         // 1. MONEY & RISK MANAGEMENT
@@ -63,7 +63,7 @@ namespace cAlgo.Robots
         // =============================================================================
         #region 3. Filters & Visual
         
-        [Parameter("🖥️ Show Text Info?", Group = "3. Filters & Visual", DefaultValue = true, Description="Show status text on chart. Disable for faster optimization.")]
+        [Parameter("🖥️ Show Text Info?", Group = "3. Filters & Visual", DefaultValue = false, Description="Show status text on chart. Disable for faster optimization.")]
         public bool ShowPanel { get; set; }
 
         [Parameter("🌊 Min Volatility (ATR Pips)", Group = "3. Filters & Visual", DefaultValue = 3, Description = "Minimum movement required to trade.")]
@@ -93,7 +93,7 @@ namespace cAlgo.Robots
         // =============================================================================
         #region 5. Fitness Weights
         
-        [Parameter("📉 Min Trades/Month", Group = "5. Fitness Weights", DefaultValue = 5, Description = "For Early Stopping during optimization.")]
+        [Parameter("📉 Min Trades/Month", Group = "5. Fitness Weights", DefaultValue = 5, Description = "For Early Stopping. Set 0 to Disable this check.")]
         public double TargetTradesPerMonth { get; set; }
 
         [Parameter("⚖️ Weight: Net Profit", Group = "5. Fitness Weights", DefaultValue = 1.0)]
@@ -242,14 +242,24 @@ namespace cAlgo.Robots
         // Using OnBar prevents repainting issues seen in OnTick strategies.
         protected override void OnBar()
         {
-            // 1. EARLY STOPPING (For Optimization Speed)
-            // If 30 days passed and trade count is low, stop the bot to save CPU time.
-            double daysRunning = (Server.Time - _startTime).TotalDays;
-            if (daysRunning >= 30.0) 
+            // 1. EARLY STOPPING (Optimization Speed)
+            // We only run this check if the user set a Target > 0.
+            // If TargetTradesPerMonth is 0, we disable this check to allow simple testing.
+            if (TargetTradesPerMonth > 0)
             {
-                double monthsRunning = daysRunning / 30.0;
-                double currentRate = _totalTradesCount / monthsRunning;
-                if (currentRate < TargetTradesPerMonth) Stop();
+                double daysRunning = (Server.Time - _startTime).TotalDays;
+                if (daysRunning >= 30.0) 
+                {
+                    double monthsRunning = daysRunning / 30.0;
+                    double currentRate = _totalTradesCount / monthsRunning;
+                    
+                    // If trade rate is too low, stop the bot to save CPU during optimization
+                    if (currentRate < TargetTradesPerMonth) 
+                    {
+                        Stop();
+                        return;
+                    }
+                }
             }
 
             // 2. DAILY PROFIT/LOSS MANAGEMENT
@@ -328,7 +338,7 @@ namespace cAlgo.Robots
         {
             string status = IsTradingAllowed() ? "Active" : "Standby";
             double vol = _atr.Result.Last(1) / Symbol.PipSize;
-            string text = $"TITAN v2.5 | Equity: {Account.Equity:F2} | Status: {status} | Vol: {vol:F1} pips";
+            string text = $"TITAN v2.6 | Equity: {Account.Equity:F2} | Trades: {_totalTradesCount} | Vol: {vol:F1} pips";
             // Draws yellow text on top-left
             Chart.DrawStaticText("simple_info", text, VerticalAlignment.Top, HorizontalAlignment.Left, Color.Yellow);
         }
