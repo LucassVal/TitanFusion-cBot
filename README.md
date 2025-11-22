@@ -1,9 +1,9 @@
-<img width="2048" height="2048" alt="Gemini_Generated_Image_tm1wdhtm1wdhtm1w" src="https://github.com/user-attachments/assets/5a636a94-725d-499c-b84c-6b81cae5bb3a" /># TitanFusion cBot (Open Source)
+<img width="800" height="800" alt="Gemini_Generated_Image_tm1wdhtm1wdhtm1w" src="https://github.com/user-attachments/assets/5a636a94-725d-499c-b84c-6b81cae5bb3a" /># TitanFusion cBot (Open Source)
 
 
 # TitanFusion cBot (Open Source)
 
-http://googleusercontent.com/image_generation_content/0
+
 
 [![Platform](https://img.shields.io/badge/Platform-cTrader-green?style=for-the-badge)](https://ctrader.com)
 [![Version](https://img.shields.io/badge/Version-v3.3_Certified-blue?style=for-the-badge)](releases)
