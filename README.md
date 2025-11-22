@@ -1,13 +1,4 @@
-Perfeito! Vou refazer o README completo com:
-
-✅ Links do Table of Contents funcionando
-✅ Espaço para cTrader Bot Store link
-✅ Toda a estrutura honesta e acolhedora
-
-
-📄 TitanFusion cBot - README.md (FINAL WORKING VERSION)
-
-<img width="800" height="800" alt="TitanFusion Algorithmic Trading System" src="https://github.com/user-attachments/assets/5a636a94-725d-499c-b84c-6b81cae5bb3a" />
+<img width="300" height="300" alt="titan fusion" src="https://github.com/user-attachments/assets/c7b6b294-2c03-4d9b-ae20-c6ccc7b3252c" />
 
 # TitanFusion cBot (Open Source)
 
