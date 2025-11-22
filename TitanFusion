@@ -22,7 +22,7 @@ namespace cAlgo.Robots
     }
 
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-    public class TitanFusion_v3_1 : Robot
+    public class TitanFusion_v3_3 : Robot // ATUALIZADO PARA v3.3
     {
         // =============================================================================
         // 0. STRATEGY CONTROLLER
@@ -205,7 +205,7 @@ namespace cAlgo.Robots
             Positions.Closed += OnPositionClosed;
             Positions.Opened += OnPositionOpened;
             
-            Print($"Titan Fusion v3.1 Started - Mode: {CurrentMode}");
+            Print($"Titan Fusion v3.3 Started - Mode: {CurrentMode}"); // ATUALIZADO
             Print($"Symbol: {SymbolName}, Timeframe: {TimeFrame}");
             Print($"XAUUSD Optimized - ATR Range: {MinAtrPips}-{MaxAtrPips} pips");
         }
@@ -356,100 +356,85 @@ namespace cAlgo.Robots
         }
 
         // =============================================================================
-        // CORRECTED HELPER METHODS & LOGIC
+        // 🔥 MÉTODO ManagePositions CORRIGIDO PARA v3.3
         // =============================================================================
-
-        private double CalculateVolume(double stopLossPips, string strategy)
+        private void ManagePositions()
         {
-            if (stopLossPips <= 0) stopLossPips = 15; // Safety for XAUUSD
-            
-            if (!EnableAutoCompound) 
-                return Symbol.QuantityToVolumeInUnits(GetFixedVolume(strategy));
-            
-            // Strategy risk multiplier
-            double stratMultiplier = strategy switch 
-            { 
-                "SCALPER" => 0.8, 
-                "BREAKOUT" => 1.0, 
-                "PULLBACK" => 1.2, 
-                _ => 1.0 
-            };
-            
-            // 🛡️ SYSTEM RISK DAMPENER
-            double systemDampener = CurrentMode switch
+            if (_parabolicSAR == null) return;
+            double sar = _parabolicSAR.Result.LastValue;
+            double atr = _atr.Result.Last(1);
+            double pipSize = Symbol.PipSize;
+
+            foreach (var position in Positions.ToList()) // 🔥 CRÍTICO: .ToList() para evitar modificação da coleção
             {
-                StrategyMode.All => 0.6,            // 40% reduction
-                StrategyMode.ScalperBreakout => 0.8,
-                StrategyMode.ScalperPullback => 0.8,
-                StrategyMode.BreakoutPullback => 0.8,
-                _ => 1.0
-            };
+                if (position.SymbolName != SymbolName) continue;
 
-            double finalRisk = RiskPerTrade * stratMultiplier * systemDampener;
-            
-            double riskAmount = Account.Balance * (finalRisk / 100.0);
-            
-            // USE PIPVALUE FOR ACCURACY
-            double pipValue = Symbol.PipValue;
-            // Fallback if PipValue is zero (rare but possible in some backtest envs)
-            if (pipValue == 0) pipValue = Symbol.TickValue; 
+                // 1. PARTIAL TAKE PROFIT (BLINDADO CONTRA BADVOLUME)
+                if (PartialTpEnabled && !_partiallyClosedPositions.Contains(position.Id.ToString()))
+                {
+                    double triggerPips = (atr * PartialTpAtrMultiplier) / pipSize;
+                    if (position.Pips >= triggerPips)
+                    {
+                        double volToClose = Symbol.NormalizeVolumeInUnits(position.VolumeInUnits * 0.5, RoundingMode.Down);
+                        
+                        if (volToClose >= Symbol.VolumeInUnitsMin) 
+                        {
+                            var closeResult = ClosePosition(position, volToClose);
+                            
+                            if (closeResult.IsSuccessful) 
+                            {
+                                Print($"💰 Partial TP Executed on {position.Label}");
+                                _partiallyClosedPositions.Add(position.Id.ToString());
+                                
+                                // 🚨 VERIFICAÇÃO CRÍTICA: Volume ainda existe?
+                                if (position.VolumeInUnits > 0) 
+                                {
+                                    double newSL = position.TradeType == TradeType.Buy ? 
+                                        position.EntryPrice + (2 * pipSize) : 
+                                        position.EntryPrice - (2 * pipSize);
+                                    ModifyPosition(position, newSL, position.TakeProfit);
+                                }
+                                else 
+                                {
+                                    Print("Partial close became Full close. No SL move needed.");
+                                }
+                            }
+                        } 
+                        else 
+                        {
+                            // Volume muito pequeno para dividir
+                            _partiallyClosedPositions.Add(position.Id.ToString());
+                            double newSL = position.EntryPrice + (position.TradeType == TradeType.Buy ? (2 * pipSize) : -(2 * pipSize));
+                            ModifyPosition(position, newSL, position.TakeProfit);
+                        }
+                    }
+                }
 
-            double volumeInUnits = riskAmount / (stopLossPips * pipValue);
-            
-            // Apply volume limits
-            double normalizedVolume = Symbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
-            double minVolume = Symbol.VolumeInUnitsMin;
-            double maxVolume = Symbol.VolumeInUnitsMax * 0.1; // Max 10% of account per trade
-            
-            if (normalizedVolume < minVolume) return minVolume;
-            if (normalizedVolume > maxVolume) return maxVolume;
-            
-            return normalizedVolume;
-        }
+                // 2. TRAILING STOP (ANTI-SPAM E FILTRO DE RUÍDO)
+                if (TrailingSarEnabled && position.VolumeInUnits > 0)
+                {
+                    double currentSL = position.StopLoss ?? position.EntryPrice;
+                    double newSL = currentSL;
+                    bool update = false;
 
-        // ✅ ESTE MÉTODO FALTAVA NA SUA VERSÃO:
-        private double GetFixedVolume(string strategy)
-        {
-            return strategy switch
-            {
-                "SCALPER" => ScalperFixedVolume,
-                "BREAKOUT" => BreakoutFixedVolume,
-                "PULLBACK" => PullbackFixedVolume,
-                _ => 0.01
-            };
-        }
+                    if (position.TradeType == TradeType.Buy) {
+                        if (sar > currentSL && sar < Symbol.Bid - (2 * pipSize)) {
+                            if (sar - currentSL > pipSize) { newSL = sar; update = true; }
+                        }
+                    } else {
+                        if (sar < currentSL && sar > Symbol.Ask + (2 * pipSize)) {
+                            if (currentSL - sar > pipSize) { newSL = sar; update = true; }
+                        }
+                    }
 
-        private bool HasOppositePosition(TradeType direction, string label)
-        {
-            var oppositeType = direction == TradeType.Buy ? TradeType.Sell : TradeType.Buy;
-            return Positions.Any(p => 
-                p.SymbolName == SymbolName && 
-                p.TradeType == oppositeType && 
-                p.Label == label);
-        }
-
-        // ✅ Position limiter to prevent over-trading
-        private bool CanOpenNewPosition(string strategy)
-        {
-            int currentPositions = Positions.Count(p => p.Label == strategy);
-            int maxPositions = 1; // Only 1 position per strategy
-            
-            if (currentPositions >= maxPositions)
-            {
-                // Print($"Strategy {strategy} already has maximum positions ({maxPositions})");
-                return false;
+                    if (update) ModifyPosition(position, newSL, position.TakeProfit);
+                }
             }
-            
-            // Overall position limit
-            int totalPositions = Positions.Count(p => p.SymbolName == SymbolName);
-            if (totalPositions >= 3) // Max 3 total positions
-            {
-                // Print($"Maximum total positions reached ({totalPositions})");
-                return false;
-            }
-            
-            return true;
         }
+
+        // =============================================================================
+        // MÉTODOS DE ENTRADA DAS ESTRATÉGIAS
+        // =============================================================================
 
         private void ProcessScalperEntry(bool allowBuy, bool allowSell)
         {
@@ -556,47 +541,70 @@ namespace cAlgo.Robots
             }
         }
 
-        // Position Management
-        private void ManagePositions()
+        // =============================================================================
+        // MÉTODOS AUXILIARES (COMPLETOS)
+        // =============================================================================
+
+        private double CalculateVolume(double stopLossPips, string strategy)
         {
-            double atr = _atr.Result.Last(1);
-            foreach (var position in Positions.ToList())
+            if (stopLossPips <= 0) stopLossPips = 15;
+            if (!EnableAutoCompound) return Symbol.QuantityToVolumeInUnits(GetFixedVolume(strategy));
+            
+            double stratMultiplier = strategy switch { "SCALPER" => 0.8, "BREAKOUT" => 1.0, "PULLBACK" => 1.2, _ => 1.0 };
+            
+            double systemDampener = CurrentMode switch
             {
-                if (position.SymbolName != SymbolName) continue;
-                
-                // Partial Take Profit
-                if (PartialTpEnabled && !_partiallyClosedPositions.Contains(position.Id.ToString()))
-                {
-                    double partialTriggerPips = (atr * PartialTpAtrMultiplier) / Symbol.PipSize;
-                    if (position.Pips >= partialTriggerPips)
-                    {
-                        ClosePosition(position, position.VolumeInUnits * 0.5);
-                        Print($"Partial TP for {position.Label} - Closed 50% at {position.Pips:F1} pips");
-                        
-                        // Move to breakeven + 2 pips
-                        double breakeven = position.EntryPrice;
-                        double newStopLoss = position.TradeType == TradeType.Buy ? 
-                            breakeven + 2 * Symbol.PipSize : 
-                            breakeven - 2 * Symbol.PipSize;
-                            
-                        ModifyPosition(position, newStopLoss, position.TakeProfit);
-                        _partiallyClosedPositions.Add(position.Id.ToString());
-                    }
-                }
-                
-                // Trailing Stop with SAR
-                if (TrailingSarEnabled && _parabolicSAR != null)
-                {
-                    double sar = _parabolicSAR.Result.LastValue;
-                    if (position.TradeType == TradeType.Buy && sar > position.StopLoss) 
-                        ModifyPosition(position, sar, position.TakeProfit);
-                    else if (position.TradeType == TradeType.Sell && sar < position.StopLoss) 
-                        ModifyPosition(position, sar, position.TakeProfit);
-                }
-            }
+                StrategyMode.All => 0.6,
+                StrategyMode.ScalperBreakout => 0.8,
+                StrategyMode.ScalperPullback => 0.8,
+                StrategyMode.BreakoutPullback => 0.8,
+                _ => 1.0
+            };
+
+            double finalRisk = RiskPerTrade * stratMultiplier * systemDampener;
+            double riskAmount = Account.Balance * (finalRisk / 100.0);
+            
+            double pipValue = Symbol.PipValue;
+            if (pipValue == 0) pipValue = Symbol.TickValue; 
+            
+            double volumeInUnits = riskAmount / (stopLossPips * pipValue);
+            
+            double normalizedVolume = Symbol.NormalizeVolumeInUnits(volumeInUnits, RoundingMode.Down);
+            double minVolume = Symbol.VolumeInUnitsMin;
+            double maxVolume = Symbol.VolumeInUnitsMax * 0.1; 
+            
+            if (normalizedVolume < minVolume) return minVolume;
+            if (normalizedVolume > maxVolume) return maxVolume;
+            return normalizedVolume;
         }
 
-        // Filter Methods
+        private double GetFixedVolume(string strategy)
+        {
+            return strategy switch
+            {
+                "SCALPER" => ScalperFixedVolume,
+                "BREAKOUT" => BreakoutFixedVolume,
+                "PULLBACK" => PullbackFixedVolume,
+                _ => 0.01
+            };
+        }
+
+        private bool HasOppositePosition(TradeType direction, string label)
+        {
+            var oppositeType = direction == TradeType.Buy ? TradeType.Sell : TradeType.Buy;
+            return Positions.Any(p => 
+                p.SymbolName == SymbolName && 
+                p.TradeType == oppositeType && 
+                p.Label == label);
+        }
+
+        private bool CanOpenNewPosition(string strategy)
+        {
+            if (Positions.Count(p => p.Label == strategy) >= 1) return false;
+            if (Positions.Count >= 3) return false;
+            return true;
+        }
+
         private bool IsTradingAllowed()
         {
             int currentHour = Server.Time.Hour;
@@ -635,12 +643,15 @@ namespace cAlgo.Robots
             double atrPips = _atr.Result.Last(1) / Symbol.PipSize;
             int positions = Positions.Count;
             
-            string text = $"TITAN v3.1 | Mode: {mode} | P/L: {pl:F2} | Pos: {positions} | ATR: {atrPips:F1}p";
+            string text = $"TITAN v3.3 | Mode: {mode} | P/L: {pl:F2} | Pos: {positions} | ATR: {atrPips:F1}p"; // ATUALIZADO
             Chart.DrawStaticText("simple_info", text, VerticalAlignment.Top, HorizontalAlignment.Left, 
                                pl >= 0 ? Color.Lime : Color.Orange);
         }
 
-        // Event Handlers
+        // =============================================================================
+        // EVENT HANDLERS
+        // =============================================================================
+
         private void OnPositionOpened(PositionOpenedEventArgs args) 
         { 
             _totalTradesCount++;
@@ -657,15 +668,21 @@ namespace cAlgo.Robots
 
         protected override double GetFitness(GetFitnessArgs args)
         {
-            double score = (args.NetProfit * WeightProfit) 
-                         - (args.MaxEquityDrawdown * WeightDrawdown * 5.0) 
-                         + (args.SharpeRatio * WeightSharpe * 100);
+            double netProfit = args.NetProfit;
+            double winRate = args.WinningTrades / (args.TotalTrades + 1.0);
+            double drawdown = args.MaxEquityDrawdown;
+            double sharpe = args.SharpeRatio;
+
+            double score = (netProfit * 1.0) 
+                         - (drawdown * 0.5 * 5.0) 
+                         + (winRate * 0.2 * 1000) 
+                         + (sharpe * 0.3 * 100);
             return score;
         }
 
         protected override void OnStop()
         {
-            Print($"Titan Fusion v3.1 stopped. Total trades: {_totalTradesCount}");
+            Print($"Titan Fusion v3.3 stopped. Total trades: {_totalTradesCount}"); // ATUALIZADO
             Print($"Final Equity: {Account.Equity:F2}, Balance: {Account.Balance:F2}");
         }
     }
