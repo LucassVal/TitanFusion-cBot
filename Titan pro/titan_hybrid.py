@@ -705,7 +705,7 @@ class HybridTrader:
         manager = DataManager()
         
         # Get data (auto-updates if >7 days old)
-        df_m1 = manager.get_data(source=DATA_SOURCE, auto_update=True)
+        df_m1 = manager.get_data(source=DATA_SOURCE, symbol=SELECTED_SYMBOL, auto_update=True)
         
         if df_m1 is None or df_m1.empty:
             print("❌ Failed to load data!")
@@ -875,7 +875,9 @@ def run_live_trading():
                 current_m1['high'] = max(current_m1['high'], price)
                 current_m1['low'] = min(current_m1['low'], price)
                 current_m1['close'] = price
-                print(f"\rPrice: {price:.2f} | M1 Buffer: {len(m1_buffer)}/15", end="")
+                # User-friendly progress
+                progress = len(m1_buffer) + 1
+                print(f"\r💵 Price: {price:.2f} | ⏳ Forming M15 Candle: {progress}/15 min", end="")
 
     if client.start(on_tick):
         print("✅ System Live! Waiting for ticks...")
