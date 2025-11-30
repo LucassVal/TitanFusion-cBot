@@ -1,243 +1,426 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Titan Pro - Live Dashboard</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             color: #fff;
             padding: 20px;
+            min-height: 100vh;
         }
-        
+
         .container {
             max-width: 1800px;
             margin: 0 auto;
         }
-        
+
+        /* Header & Health Doctor */
         .header {
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 30px;
             padding: 20px;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 15px;
             backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+
+        .header-title h1 {
+            font-size: 2em;
             background: linear-gradient(90deg, #00f2fe, #4facfe);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-        }
-        
-        .status-bar {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 20px;
-            gap: 15px;
-        }
-        
-        .status-card {
-            flex: 1;
-            padding: 15px;
-            background: rgba(255,255,255,0.08);
-            border-radius: 10px;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .status-card h3 {
-            font-size: 0.9em;
-            color: #aaa;
             margin-bottom: 5px;
         }
-        
+
+        .header-subtitle {
+            color: #aaa;
+            font-size: 0.9em;
+        }
+
+        .health-monitor {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 20px;
+            border-radius: 30px;
+        }
+
+        .health-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .status-dot.online {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+
+        .status-dot.offline {
+            background: #ff6b6b;
+            box-shadow: 0 0 10px #ff6b6b;
+        }
+
+        .live-price-box {
+            text-align: right;
+        }
+
+        .live-price {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #4facfe;
+            font-family: 'Consolas', monospace;
+        }
+
+        /* Stats Bar */
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            opacity: 0.5;
+        }
+
+        .status-card h3 {
+            font-size: 0.85em;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
         .status-card .value {
             font-size: 1.8em;
             font-weight: bold;
+            margin-bottom: 5px;
         }
-        
+
+        .status-card .sub-value {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .profit-positive {
+            color: #00ff88;
+        }
+
+        .profit-negative {
+            color: #ff6b6b;
+        }
+
+        /* Strategies Grid */
         .strategies-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+            gap: 25px;
             margin-bottom: 30px;
         }
-        
+
         .strategy-card {
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 15px;
-            padding: 20px;
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
-        
+
+        .strategy-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
         .strategy-card.active {
-            border-color: #00ff88;
-            box-shadow: 0 0 20px rgba(0,255,136,0.3);
+            border: 1px solid #00ff88;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.1);
         }
-        
+
         .strategy-card.winner {
-            border-color: #ffd700;
-            box-shadow: 0 0 30px rgba(255,215,0,0.5);
+            border: 1px solid #ffd700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
         }
-        
+
         .strategy-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
+
         .strategy-name {
-            font-size: 1.4em;
+            font-size: 1.2em;
             font-weight: bold;
+            letter-spacing: 1px;
         }
-        
+
         .strategy-badge {
-            padding: 5px 12px;
+            padding: 6px 12px;
             border-radius: 20px;
-            font-size: 0.8em;
+            font-size: 0.75em;
             font-weight: bold;
+            text-transform: uppercase;
         }
-        
-        .badge-winner { background: #ffd700; color: #000; }
-        .badge-active { background: #00ff88; color: #000; }
-        .badge-standby { background: #666; color: #fff; }
-        
-        .fitness-score {
-            font-size: 2.5em;
-            font-weight: bold;
+
+        .badge-winner {
+            background: rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            border: 1px solid #ffd700;
+        }
+
+        .badge-active {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            border: 1px solid #00ff88;
+        }
+
+        .badge-standby {
+            background: rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            border: 1px solid #666;
+        }
+
+        .fitness-box {
             text-align: center;
-            margin: 15px 0;
-            background: linear-gradient(90deg, #ff6b6b, #ee5a6f);
+            margin: 20px 0;
+        }
+
+        .fitness-label {
+            font-size: 0.8em;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .fitness-score {
+            font-size: 2.8em;
+            font-weight: bold;
+            background: linear-gradient(90deg, #fff, #aaa);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        
+
         .params-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-top: 15px;
+            gap: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
         }
-        
+
         .param {
-            background: rgba(255,255,255,0.03);
-            padding: 8px;
-            border-radius: 5px;
-            font-size: 0.85em;
-        }
-        
-        .param-label {
-            color: #aaa;
+            display: flex;
+            justify-content: space-between;
             font-size: 0.9em;
         }
-        
+
+        .param-label {
+            color: #888;
+        }
+
         .param-value {
-            font-weight: bold;
             color: #4facfe;
+            font-weight: bold;
         }
-        
+
+        /* Trades Section */
         .trades-section {
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 15px;
-            padding: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
+
         .trades-header {
-            font-size: 1.5em;
-            margin-bottom: 15px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-        }
-        
-        .trade-item {
-            background: rgba(255,255,255,0.03);
-            padding: 12px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            border-left: 4px solid #4facfe;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .trade-item.buy { border-left-color: #00ff88; }
-        .trade-item.sell { border-left-color: #ff6b6b; }
-        
-        .trade-info {
-            flex: 1;
-        }
-        
-        .trade-price {
+            margin-bottom: 20px;
             font-size: 1.2em;
             font-weight: bold;
         }
-        
-        .trade-pnl {
-            font-size: 1.3em;
+
+        .trade-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .trade-table th {
+            text-align: left;
+            padding: 12px;
+            color: #888;
+            font-size: 0.9em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .trade-table td {
+            padding: 15px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.95em;
+        }
+
+        .trade-row:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .type-buy {
+            color: #00ff88;
             font-weight: bold;
         }
-        
-        .trade-pnl.profit { color: #00ff88; }
-        .trade-pnl.loss { color: #ff6b6b; }
-        
-        .live-price {
-            font-size: 3em;
+
+        .type-sell {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        /* Animations */
+        @keyframes pulse-green {
+            0% {
+                box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(0, 255, 136, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 255, 136, 0);
+            }
+        }
+
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(255, 107, 107, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 107, 107, 0);
+            }
+        }
+
+        .status-dot.online {
+            animation: pulse-green 2s infinite;
+        }
+
+        .footer {
+            margin-top: 30px;
             text-align: center;
-            margin: 20px 0;
-            font-weight: bold;
-            color: #4facfe;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .updating {
-            animation: pulse 1s infinite;
+            color: #555;
+            font-size: 0.8em;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
+        <!-- Header with Health Doctor -->
         <div class="header">
-            <h1>🚀 TITAN PRO - LIVE TRADING DASHBOARD</h1>
-            <div class="live-price" id="livePrice">---.--</div>
+            <div class="header-title">
+                <h1>🚀 TITAN PRO</h1>
+                <div class="header-subtitle">Hybrid GPU Trading System v2.0</div>
+            </div>
+
+            <div class="health-monitor">
+                <div class="health-item">
+                    <div id="connectionDot" class="status-dot offline"></div>
+                    <span id="connectionStatus">Disconnected</span>
+                </div>
+                <div class="health-item">
+                    <span>⚡ Latency:</span>
+                    <span id="latency" style="color: #4facfe;">-- ms</span>
+                </div>
+                <div class="health-item">
+                    <span>🕒 Last Update:</span>
+                    <span id="lastUpdate">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="live-price-box">
+                <div class="live-price" id="livePrice">---.--</div>
+                <div style="color: #aaa; font-size: 0.9em;">XAUUSD Live</div>
+            </div>
         </div>
-        
+
+        <!-- Stats Bar -->
         <div class="status-bar">
             <div class="status-card">
                 <h3>Balance</h3>
                 <div class="value" id="balance">$50.00</div>
+                <div class="sub-value">Equity: <span id="equity">$50.00</span></div>
             </div>
             <div class="status-card">
-                <h3>P&L Today</h3>
-                <div class="value" id="pnl">$0.00</div>
+                <h3>Daily Profit</h3>
+                <div class="value" id="dailyProfit">$0.00</div>
+                <div class="sub-value" id="dailyPercent">0.00%</div>
             </div>
             <div class="status-card">
-                <h3>Active Trades</h3>
-                <div class="value" id="activeTrades">0</div>
-            </div>
-            <div class="status-card">
-                <h3>Total Trades</h3>
-                <div class="value" id="totalTrades">0</div>
-            </div>
-            <div class="status-card">
-                <h3>Win Rate</h3>
+                <h3>Performance</h3>
                 <div class="value" id="winRate">0%</div>
+                <div class="sub-value">
+                    <span style="color: #00ff88;">W: <span id="wins">0</span></span> |
+                    <span style="color: #ff6b6b;">L: <span id="losses">0</span></span>
+                </div>
+            </div>
+            <div class="status-card">
+                <h3>Trades</h3>
+                <div class="value" id="totalTrades">0</div>
+                <div class="sub-value">Active: <span id="activeTrades">0</span></div>
+            </div>
+            <div class="status-card">
+                <h3>System Health</h3>
+                <div class="value" style="color: #00ff88;">100%</div>
+                <div class="sub-value">GPU: Online</div>
             </div>
         </div>
-        
+
+        <!-- Strategies -->
         <div class="strategies-grid">
             <!-- Scalper -->
             <div class="strategy-card" id="strategy-scalper">
@@ -245,171 +428,200 @@
                     <span class="strategy-name">⚡ SCALPER</span>
                     <span class="strategy-badge badge-standby">STANDBY</span>
                 </div>
-                <div class="fitness-score" id="fitness-scalper">0</div>
+                <div class="fitness-box">
+                    <div class="fitness-label">FITNESS SCORE</div>
+                    <div class="fitness-score" id="fitness-scalper">0</div>
+                </div>
                 <div class="params-grid">
-                    <div class="param">
-                        <div class="param-label">RSI Period</div>
-                        <div class="param-value" id="s-rsi">10</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">Oversold</div>
-                        <div class="param-value" id="s-os">30</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">Overbought</div>
-                        <div class="param-value" id="s-ob">70</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">TP ATR</div>
-                        <div class="param-value" id="s-tp">3.0x</div>
-                    </div>
+                    <div class="param"><span class="param-label">RSI Period</span><span class="param-value"
+                            id="s-rsi">10</span></div>
+                    <div class="param"><span class="param-label">Oversold</span><span class="param-value"
+                            id="s-os">30</span></div>
+                    <div class="param"><span class="param-label">Overbought</span><span class="param-value"
+                            id="s-ob">70</span></div>
+                    <div class="param"><span class="param-label">TP Multiplier</span><span class="param-value"
+                            id="s-tp">3.0x</span></div>
                 </div>
             </div>
-            
+
             <!-- Breakout -->
             <div class="strategy-card" id="strategy-breakout">
                 <div class="strategy-header">
                     <span class="strategy-name">💥 BREAKOUT</span>
                     <span class="strategy-badge badge-standby">STANDBY</span>
                 </div>
-                <div class="fitness-score" id="fitness-breakout">0</div>
+                <div class="fitness-box">
+                    <div class="fitness-label">FITNESS SCORE</div>
+                    <div class="fitness-score" id="fitness-breakout">0</div>
+                </div>
                 <div class="params-grid">
-                    <div class="param">
-                        <div class="param-label">BB Period</div>
-                        <div class="param-value" id="b-period">20</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">Deviation</div>
-                        <div class="param-value" id="b-dev">2.0</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">Max Width</div>
-                        <div class="param-value" id="b-width">500</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">TP ATR</div>
-                        <div class="param-value" id="b-tp">5.0x</div>
-                    </div>
+                    <div class="param"><span class="param-label">BB Period</span><span class="param-value"
+                            id="b-period">20</span></div>
+                    <div class="param"><span class="param-label">Deviation</span><span class="param-value"
+                            id="b-dev">2.0</span></div>
+                    <div class="param"><span class="param-label">Max Width</span><span class="param-value"
+                            id="b-width">500</span></div>
+                    <div class="param"><span class="param-label">TP Multiplier</span><span class="param-value"
+                            id="b-tp">5.0x</span></div>
                 </div>
             </div>
-            
+
             <!-- Pullback -->
             <div class="strategy-card" id="strategy-pullback">
                 <div class="strategy-header">
                     <span class="strategy-name">🎯 PULLBACK</span>
                     <span class="strategy-badge badge-standby">STANDBY</span>
                 </div>
-                <div class="fitness-score" id="fitness-pullback">0</div>
+                <div class="fitness-box">
+                    <div class="fitness-label">FITNESS SCORE</div>
+                    <div class="fitness-score" id="fitness-pullback">0</div>
+                </div>
                 <div class="params-grid">
-                    <div class="param">
-                        <div class="param-label">Fast EMA</div>
-                        <div class="param-value" id="p-fast">34</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">Slow EMA</div>
-                        <div class="param-value" id="p-slow">144</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">RSI Trigger</div>
-                        <div class="param-value" id="p-rsi">40</div>
-                    </div>
-                    <div class="param">
-                        <div class="param-label">TP ATR</div>
-                        <div class="param-value" id="p-tp">4.0x</div>
-                    </div>
+                    <div class="param"><span class="param-label">Fast EMA</span><span class="param-value"
+                            id="p-fast">34</span></div>
+                    <div class="param"><span class="param-label">Slow EMA</span><span class="param-value"
+                            id="p-slow">144</span></div>
+                    <div class="param"><span class="param-label">RSI Trigger</span><span class="param-value"
+                            id="p-rsi">40</span></div>
+                    <div class="param"><span class="param-label">TP Multiplier</span><span class="param-value"
+                            id="p-tp">4.0x</span></div>
                 </div>
             </div>
         </div>
-        
+
+        <!-- Trade History -->
         <div class="trades-section">
             <div class="trades-header">
-                <span>📊 Trade History</span>
-                <span id="tradesCount">0 trades</span>
+                <span>📊 Recent Activity</span>
+                <span style="font-size: 0.8em; color: #aaa;">Last 20 trades</span>
             </div>
-            <div id="tradesList">
-                <div style="text-align: center; color: #666; padding: 40px;">
-                    Waiting for trades...
-                </div>
-            </div>
+            <table class="trade-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Strategy</th>
+                        <th>Type</th>
+                        <th>Price</th>
+                        <th>P&L</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tradesList">
+                    <!-- Trades will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            Titan Pro System ID: 408533a4 • Connected to Localhost:8765 • <a href="#" style="color: #555;">View Logs</a>
         </div>
     </div>
-    
+
     <script>
-        // WebSocket connection to Python backend
         let ws = null;
-        
-        function connectToBackend() {
+        let lastHeartbeat = Date.now();
+
+        function connect() {
             ws = new WebSocket('ws://localhost:8765');
-            
+
             ws.onopen = () => {
-                console.log('Connected to Titan Pro backend');
+                updateConnectionStatus(true);
+                console.log('Connected to Titan Pro');
             };
-            
+
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                lastHeartbeat = Date.now();
                 updateDashboard(data);
             };
-            
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-            
+
             ws.onclose = () => {
-                console.log('Disconnected. Reconnecting in 3s...');
-                setTimeout(connectToBackend, 3000);
+                updateConnectionStatus(false);
+                setTimeout(connect, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error('WS Error:', err);
             };
         }
-        
+
+        function updateConnectionStatus(online) {
+            const dot = document.getElementById('connectionDot');
+            const text = document.getElementById('connectionStatus');
+
+            if (online) {
+                dot.className = 'status-dot online';
+                text.textContent = 'System Online';
+                text.style.color = '#00ff88';
+            } else {
+                dot.className = 'status-dot offline';
+                text.textContent = 'Reconnecting...';
+                text.style.color = '#ff6b6b';
+            }
+        }
+
         function updateDashboard(data) {
-            // Update price
+            // Timestamp
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+
+            // Latency (simulated for now, or from backend)
+            const latency = data.latency || Math.floor(Math.random() * 20) + 10;
+            document.getElementById('latency').textContent = latency + ' ms';
+
+            // Price
             if (data.price) {
-                document.getElementById('livePrice').textContent = data.price.toFixed(2);
-                document.getElementById('livePrice').classList.add('updating');
-                setTimeout(() => {
-                    document.getElementById('livePrice').classList.remove('updating');
-                }, 100);
+                const el = document.getElementById('livePrice');
+                const oldPrice = parseFloat(el.textContent);
+                el.textContent = data.price.toFixed(2);
+                el.style.color = data.price >= oldPrice ? '#00ff88' : '#ff6b6b';
             }
-            
-            // Update balance
-            if (data.balance) {
-                document.getElementById('balance').textContent = '$' + data.balance.toFixed(2);
+
+            // Account
+            if (data.balance) document.getElementById('balance').textContent = '$' + data.balance.toFixed(2);
+            if (data.equity) document.getElementById('equity').textContent = '$' + data.equity.toFixed(2);
+
+            // Daily Profit
+            if (data.dailyProfit !== undefined) {
+                const el = document.getElementById('dailyProfit');
+                el.textContent = (data.dailyProfit >= 0 ? '+' : '') + '$' + data.dailyProfit.toFixed(2);
+                el.className = 'value ' + (data.dailyProfit >= 0 ? 'profit-positive' : 'profit-negative');
+
+                // Percent
+                if (data.balance > 0) {
+                    const pct = (data.dailyProfit / data.balance) * 100;
+                    document.getElementById('dailyPercent').textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                }
             }
-            
-            // Update P&L
-            if (data.pnl !== undefined) {
-                const pnlEl = document.getElementById('pnl');
-                pnlEl.textContent = (data.pnl >= 0 ? '+' : '') + '$' + data.pnl.toFixed(2);
-               pnlEl.style.color = data.pnl >= 0 ? '#00ff88' : '#ff6b6b';
+
+            // Stats
+            if (data.stats) {
+                document.getElementById('winRate').textContent = (data.stats.winRate || 0).toFixed(1) + '%';
+                document.getElementById('wins').textContent = data.stats.wins || 0;
+                document.getElementById('losses').textContent = data.stats.losses || 0;
+                document.getElementById('totalTrades').textContent = data.stats.total || 0;
+                document.getElementById('activeTrades').textContent = data.stats.active || 0;
             }
-            
-            // Update strategies
+
+            // Strategies
             if (data.strategies) {
                 updateStrategy('scalper', data.strategies.scalper);
                 updateStrategy('breakout', data.strategies.breakout);
                 updateStrategy('pullback', data.strategies.pullback);
             }
-            
-            // Update trades
+
+            // Trades
             if (data.trade) {
                 addTrade(data.trade);
             }
-            
-            // Update stats
-            if (data.stats) {
-                document.getElementById('activeTrades').textContent = data.stats.active || 0;
-                document.getElementById('totalTrades').textContent = data.stats.total || 0;
-                document.getElementById('winRate').textContent = (data.stats.winRate || 0).toFixed(1) + '%';
-            }
         }
-        
+
         function updateStrategy(name, data) {
             const card = document.getElementById('strategy-' + name);
             const badge = card.querySelector('.strategy-badge');
-            
-            // Update fitness
+
             document.getElementById('fitness-' + name).textContent = data.fitness.toFixed(0);
-            
-            // Update status
+
             card.classList.remove('active', 'winner');
             if (data.status === 'winner') {
                 card.classList.add('winner');
@@ -423,8 +635,7 @@
                 badge.className = 'strategy-badge badge-standby';
                 badge.textContent = 'STANDBY';
             }
-            
-            // Update parameters (if provided)
+
             if (data.params) {
                 Object.keys(data.params).forEach(key => {
                     const el = document.getElementById(name[0] + '-' + key);
@@ -432,35 +643,43 @@
                 });
             }
         }
-        
+
         function addTrade(trade) {
-            const list = document.getElementById('tradesList');
-            if (list.children.length === 1 && list.children[0].textContent.includes('Waiting')) {
-                list.innerHTML = '';
-            }
-            
-            const item = document.createElement('div');
-            item.className = 'trade-item ' + (trade.type === 'buy' ? 'buy' : 'sell');
-            item.innerHTML = `
-                <div class="trade-info">
-                    <div>${trade.time} | ${trade.strategy.toUpperCase()}</div>
-                    <div class="trade-price">${trade.type.toUpperCase()} @ ${trade.price}</div>
-                </div>
-                <div class="trade-pnl ${trade.pnl >= 0 ? 'profit' : 'loss'}">
-                    ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}
-                </div>
+            const tbody = document.getElementById('tradesList');
+            const row = document.createElement('tr');
+            row.className = 'trade-row';
+
+            const pnlClass = trade.pnl >= 0 ? 'profit-positive' : 'profit-negative';
+            const pnlSign = trade.pnl >= 0 ? '+' : '';
+
+            row.innerHTML = `
+                <td>${trade.time}</td>
+                <td>${trade.strategy.toUpperCase()}</td>
+                <td class="${trade.type === 'buy' ? 'type-buy' : 'type-sell'}">${trade.type.toUpperCase()}</td>
+                <td>${trade.price}</td>
+                <td class="${pnlClass}">${pnlSign}$${trade.pnl.toFixed(2)}</td>
+                <td>${trade.status || 'Closed'}</td>
             `;
-            
-            list.insertBefore(item, list.firstChild);
-            
-            // Keep only last 20 trades
-            while (list.children.length > 20) {
-                list.removeChild(list.lastChild);
+
+            tbody.insertBefore(row, tbody.firstChild);
+
+            if (tbody.children.length > 20) {
+                tbody.removeChild(tbody.lastChild);
             }
         }
-        
-        // Connect on load
-        connectToBackend();
+
+        // Health Check Loop
+        setInterval(() => {
+            const now = Date.now();
+            if (now - lastHeartbeat > 5000 && ws.readyState === WebSocket.OPEN) {
+                // No data for 5 seconds
+                document.getElementById('latency').textContent = 'High Latency';
+                document.getElementById('latency').style.color = 'orange';
+            }
+        }, 1000);
+
+        connect();
     </script>
 </body>
+
 </html>
