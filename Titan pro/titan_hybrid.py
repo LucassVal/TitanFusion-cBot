@@ -18,6 +18,13 @@ SELECTED_SYMBOL = "R_75"
 SELECTED_TIMEFRAME = "15min"  # pandas resample format
 SELECTED_TF_MINUTES = 15
 DATA_SOURCE = "dukascopy"  # 'dukascopy' or 'deriv'
+API_TOKEN = None  # Set by launcher
+
+# Risk Management (Set by launcher)
+RISK_PER_TRADE = 0.02      # 2%
+DAILY_PROFIT_GOAL = 50.0   # $50
+MAX_DAILY_LOSS = 25.0      # $25
+TOTAL_PROFIT_TARGET = 1000.0 # $1000
 
 # Initial "Safe" Parameters (Fallback)
 DEFAULT_PARAMS = {
@@ -805,15 +812,20 @@ def run_live_trading():
     print("="*50)
     print("TITAN PRO - LIVE HYBRID TRADING (DERIV API)")
     print("="*50)
-    print("⏰ Timeframe: M15")
-    print("💰 Balance: $50")
-    print("🎯 Risk: 2% per trade")
+    print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
+    print(f"💰 Balance: $50 (Start)")
+    print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
+    print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
     print("="*50)
     
     trader = HybridTrader()
     trader.initialize_with_history() # Pre-flight check
     
-    client = DerivClient()
+    if not API_TOKEN:
+        print("❌ Error: API Token not set!")
+        return
+
+    client = DerivClient(token=API_TOKEN)
     
     # M1 -> M15 Aggregator State
     m1_buffer = []

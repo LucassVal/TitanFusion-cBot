@@ -114,36 +114,106 @@ def select_data_source():
         except ValueError:
             print("❌ Invalid input! Please enter a number 1-2")
 
+def configure_risk_management():
+    print("\n🛡️ RISK MANAGEMENT CONFIGURATION:")
+    print("   ─────────────────────────")
+    
+    # 1. Risk Per Trade
+    while True:
+        try:
+            r = input("   👉 Risk per trade (%) [Default: 2.0]: ").strip()
+            if not r:
+                risk = 0.02
+                break
+            risk = float(r) / 100.0
+            if 0.001 <= risk <= 0.10:
+                break
+            print("   ❌ Risk must be between 0.1% and 10%")
+        except:
+            print("   ❌ Invalid number")
+            
+    # 2. Daily Profit Goal
+    while True:
+        try:
+            g = input("   👉 Daily Profit Goal ($) [Default: 50.0]: ").strip()
+            if not g:
+                daily_goal = 50.0
+                break
+            daily_goal = float(g)
+            if daily_goal > 0:
+                break
+            print("   ❌ Goal must be positive")
+        except:
+            print("   ❌ Invalid number")
+
+    # 3. Max Daily Loss
+    while True:
+        try:
+            l = input("   👉 Max Daily Loss ($) [Default: 25.0]: ").strip()
+            if not l:
+                max_loss = 25.0
+                break
+            max_loss = float(l)
+            if max_loss > 0:
+                break
+            print("   ❌ Loss limit must be positive")
+        except:
+            print("   ❌ Invalid number")
+            
+    # 4. Total Profit Target
+    while True:
+        try:
+            t = input("   👉 Total Profit Target ($) [Default: 1000.0]: ").strip()
+            if not t:
+                total_target = 1000.0
+                break
+            total_target = float(t)
+            if total_target > 0:
+                break
+            print("   ❌ Target must be positive")
+        except:
+            print("   ❌ Invalid number")
+            
+    print(f"\n✅ Risk Configured: {risk*100}% Risk | Goal: ${daily_goal} | Max Loss: ${max_loss}")
+    return risk, daily_goal, max_loss, total_target
+
 def main():
     show_banner()
     
-    # Market selection FIRST
-    symbol, market_name = select_market()
-    
-    # Timeframe selection
-    tf_pandas, tf_name, tf_minutes = select_timeframe()
-    
-    # AUTO-DETECT: Real ou Sintético
-    is_synthetic = symbol.startswith('R_')  # R_75, R_100, etc
-    
-    if is_synthetic:
-        data_source = 'deriv'
-        source_name = 'Deriv (Synthetic)'
-    else:
-        data_source = 'dukascopy'
-        source_name = 'Dukascopy (Real Market)'
-    
-    print("\n" + "="*70)
-    print(f"📌 CONFIGURATION:")
-    print(f"   Market:      {market_name}")
-    print(f"   Symbol:      {symbol}")
-    print(f"   Type:        {'SYNTHETIC' if is_synthetic else 'REAL'}")
-    print(f"   Data Source: {source_name} (auto-detected)")
-    print(f"   Timeframe:   {tf_name}")
-    print(f"   Balance:     $50")
-    print(f"   Risk:        2% per trade")
-    print(f"   Strategies:  Scalper + Breakout + Pullback")
-    print("="*70)
+        
+    # API TOKEN CHECK
+    if data_source == 'deriv':
+        config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "titan_config.json")
+        import json
+        
+        token = None
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                    token = config.get('deriv_token')
+            except:
+                pass
+        
+        if not token:
+            print("\n🔑 DERIV API TOKEN REQUIRED")
+            print("   Please enter your Deriv API Token (Settings -> API Token -> Read/Trade)")
+            token = input("👉 API Token: ").strip()
+            
+            if token:
+                save = input("   Save token for future use? (y/n): ").strip().lower()
+                if save == 'y':
+                    with open(config_file, 'w') as f:
+                        json.dump({'deriv_token': token}, f)
+                    print("   ✅ Token saved securely.")
+        
+        if not token:
+            print("❌ API Token is required for Deriv trading!")
+            return
+            
+        # Set token for titan_hybrid
+        import titan_hybrid
+        titan_hybrid.API_TOKEN = token
     
     # Check/download data AUTOMATICALLY
     from data_manager import DataManager
@@ -201,6 +271,12 @@ def main():
     titan_hybrid.SELECTED_TIMEFRAME = tf_pandas
     titan_hybrid.SELECTED_TF_MINUTES = tf_minutes
     titan_hybrid.DATA_SOURCE = data_source
+    
+    # Pass Risk Settings
+    titan_hybrid.RISK_PER_TRADE = risk
+    titan_hybrid.DAILY_PROFIT_GOAL = daily_goal
+    titan_hybrid.MAX_DAILY_LOSS = max_loss
+    titan_hybrid.TOTAL_PROFIT_TARGET = total_target
     
     run_live_trading()
 

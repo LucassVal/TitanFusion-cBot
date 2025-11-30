@@ -6,11 +6,10 @@ import threading
 
 # Constants
 APP_ID = 1089
-DEFAULT_TOKEN = "f6iBrpnmPI8tXUI"
 DEFAULT_SYMBOL = "R_75"  # Volatility 75 Index
 
 class DerivClient:
-    def __init__(self, token=DEFAULT_TOKEN, app_id=APP_ID, symbol=DEFAULT_SYMBOL):
+    def __init__(self, token, app_id=APP_ID, symbol=DEFAULT_SYMBOL):
         self.url = f"wss://ws.binaryws.com/websockets/v3?app_id={app_id}"
         self.token = token
         self.symbol = symbol
