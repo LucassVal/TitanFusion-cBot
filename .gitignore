@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Data Files (Downloaded Automatically)
+*.csv
+!example_data.csv
+data_cache.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Titan Pro Specific
+Titan pro/*.csv
+Titan pro/data_cache.json
+Titan pro/__pycache__/
+
+# Logs
+*.log
+
+# Temporary
+*.tmp
+*.temp
