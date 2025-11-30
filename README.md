@@ -52,12 +52,19 @@
 
 ## 🚀 Quick Start
 
-### **1. Install Dependencies**
-```bash
-pip install pandas pandas_ta numpy pyopencl websockets
+### **⚡ One-Line Installer (Recommended)**
+Open **PowerShell** as Administrator and run:
+```powershell
+irm https://raw.githubusercontent.com/LucassVal/TitanFusion-cBot/main/install.ps1 | iex
 ```
 
-### **2. Run Launcher**
+### **Manual Installation**
+**1. Install Dependencies**
+```bash
+pip install pandas pandas_ta numpy pyopencl websockets requests
+```
+
+**2. Run Launcher**
 ```bash
 cd "Titan pro"
 python launcher.py
