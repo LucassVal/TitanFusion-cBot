@@ -39,9 +39,13 @@ class DataManager:
         with open(self.cache_file, 'w') as f:
             json.dump(self.cache, f, indent=2)
     
-    def needs_update(self, source='dukascopy', days=7):
+    def needs_update(self, key_or_source='dukascopy', days=7):
         """Check if data needs update (older than X days)"""
-        last_update = self.cache[source]['last_update']
+        # Handle both 'dukascopy' and 'dukascopy_XAUUSD' keys
+        if key_or_source not in self.cache:
+            return True
+            
+        last_update = self.cache[key_or_source].get('last_update')
         
         if not last_update:
             return True
@@ -157,26 +161,51 @@ class DataManager:
         
         return None
     
-    def get_data(self, source='dukascopy', auto_update=True):
-        """Get data (auto-update if needed)"""
-        if auto_update and self.needs_update(source, days=7):
-            print(f"🔄 Data is old, auto-updating {source}...")
-            if source == 'dukascopy':
-                self.update_dukascopy()
-            else:
-                self.update_deriv()
+    def get_data(self, source='dukascopy', symbol='XAUUSD', auto_update=True):
+        """Get data for specific symbol (auto-update if needed)"""
+        cache_key = f"{source}_{symbol}"
         
-        filepath = self.cache[source]['file']
+        # Check if we have this specific symbol in cache
+        if cache_key not in self.cache:
+            # Try to find generic source (fallback)
+            if source in self.cache and self.cache[source].get('file'):
+                 print(f"⚠️ Warning: Using generic {source} data. Might not match {symbol}.")
+                 cache_key = source
+            else:
+                print(f"⚠️ No data found for {symbol} in {source}. Downloading...")
+                if source == 'dukascopy':
+                    self.update_dukascopy(symbol=symbol, force=True)
+                else:
+                    self.update_deriv(symbol=symbol, force=True)
+                
+                # Reload cache to ensure key exists
+                self.load_cache()
+
+        if auto_update and self.needs_update(cache_key, days=7):
+            print(f"🔄 Data is old, auto-updating {source} for {symbol}...")
+            if source == 'dukascopy':
+                self.update_dukascopy(symbol=symbol)
+            else:
+                self.update_deriv(symbol=symbol)
+        
+        # Reload cache in case it was updated
+        if cache_key not in self.cache:
+             return None
+             
+        filepath = self.cache[cache_key]['file']
         
         if not filepath or not os.path.exists(filepath):
-            print(f"⚠️ No {source} data found. Run update first.")
+            print(f"⚠️ File not found: {filepath}")
             return None
         
-        print(f"📂 Loading {source} data: {self.cache[source]['candles']:,} candles")
-        df = pd.read_csv(filepath)
-        df['time'] = pd.to_datetime(df['time'])
-        
-        return df
+        print(f"📂 Loading {symbol} data: {self.cache[cache_key]['candles']:,} candles")
+        try:
+            df = pd.read_csv(filepath)
+            df['time'] = pd.to_datetime(df['time'])
+            return df
+        except Exception as e:
+            print(f"❌ Error reading file: {e}")
+            return None
     
     def show_status(self):
         """Show data status"""

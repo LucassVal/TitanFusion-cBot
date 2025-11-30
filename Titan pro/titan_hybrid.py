@@ -9,6 +9,7 @@ import os
 import sys
 import itertools
 import asyncio
+from datetime import datetime, timedelta
 
 # =============================================================================
 # CONFIGURATION (Dynamic - set by launcher)
@@ -17,7 +18,8 @@ import asyncio
 SELECTED_SYMBOL = "R_75"
 SELECTED_TIMEFRAME = "15min"  # pandas resample format
 SELECTED_TF_MINUTES = 15
-DATA_SOURCE = "dukascopy"  # 'dukascopy' or 'deriv'
+# Auto-detect source for standalone execution
+DATA_SOURCE = "deriv" if SELECTED_SYMBOL.startswith("R_") else "dukascopy"
 API_TOKEN = None  # Set by launcher
 
 # Risk Management (Set by launcher)
@@ -821,8 +823,24 @@ def run_live_trading():
     trader = HybridTrader()
     trader.initialize_with_history() # Pre-flight check
     
-    if not API_TOKEN:
-        print("❌ Error: API Token not set!")
+    trader = HybridTrader()
+    trader.initialize_with_history() # Pre-flight check
+    
+    # Fallback: Try to load token from config if not set
+    global API_TOKEN
+    if not API_TOKEN and DATA_SOURCE == 'deriv':
+        try:
+            import json
+            config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "titan_config.json")
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                    API_TOKEN = config.get('deriv_token')
+        except:
+            pass
+
+    if not API_TOKEN and DATA_SOURCE == 'deriv':
+        print("❌ Error: API Token not set! Run launcher.py to configure.")
         return
 
     client = DerivClient(token=API_TOKEN)

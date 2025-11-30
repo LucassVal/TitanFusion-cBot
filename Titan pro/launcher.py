@@ -32,11 +32,21 @@ def select_market():
     print("   [6] USD/JPY")
     print("   [7] XAU/USD (Gold)")
     print("   [8] GBP/USD")
+    print("\n   SYSTEM")
+    print("   ─────────────────────────")
+    print("   [0] 🔄 UPDATE SYSTEM (Git Pull)")
     
     while True:
         try:
-            choice = input("\n👉 Enter choice (1-8): ").strip()
+            choice = input("\n👉 Enter choice (0-8): ").strip()
             choice_num = int(choice)
+            
+            if choice_num == 0:
+                print("\n🔄 Updating Titan Pro...")
+                os.system("git pull")
+                print("\n✅ Update complete! Please restart the launcher.")
+                input("Press Enter to exit...")
+                sys.exit()
             
             markets = {
                 1: ("R_75", "Volatility 75 Index"),
@@ -180,7 +190,37 @@ def configure_risk_management():
 def main():
     show_banner()
     
-        
+    # 1. Market selection
+    symbol, market_name = select_market()
+    
+    # 2. Timeframe selection
+    tf_pandas, tf_name, tf_minutes = select_timeframe()
+    
+    # 3. Risk Management
+    risk, daily_goal, max_loss, total_target = configure_risk_management()
+    
+    # 4. Auto-detect Data Source
+    is_synthetic = symbol.startswith('R_')  # R_75, R_100, etc
+    
+    if is_synthetic:
+        data_source = 'deriv'
+        source_name = 'Deriv (Synthetic)'
+    else:
+        data_source = 'dukascopy'
+        source_name = 'Dukascopy (Real Market)'
+    
+    print("\n" + "="*70)
+    print(f"📌 CONFIGURATION:")
+    print(f"   Market:      {market_name}")
+    print(f"   Symbol:      {symbol}")
+    print(f"   Type:        {'SYNTHETIC' if is_synthetic else 'REAL'}")
+    print(f"   Data Source: {source_name} (auto-detected)")
+    print(f"   Timeframe:   {tf_name}")
+    print(f"   Risk:        {risk*100:.1f}%")
+    print(f"   Daily Goal:  ${daily_goal}")
+    print(f"   Strategies:  Scalper + Breakout + Pullback")
+    print("="*70)
+    
     # API TOKEN CHECK
     if data_source == 'deriv':
         config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "titan_config.json")
@@ -285,3 +325,9 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n\n👋 Goodbye!")
+    except Exception as e:
+        print(f"\n❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        input("\nPress Enter to exit...")
