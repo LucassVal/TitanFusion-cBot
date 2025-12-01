@@ -77,6 +77,7 @@ __kernel void portfolio_kernel(
     __global const float* atr,
     __global const int* hour,
     const int num_candles,
+    const float initial_balance,   // NEW: User's real balance
     __global const float* params,   // [S_P1..P5, B_P1..P5, P_P1..P5]
     __global float* results         // [NetProfit, Trades, Wins, MaxDD]
 ) {
@@ -88,11 +89,12 @@ __kernel void portfolio_kernel(
     float b_p1 = params[offset + 5]; float b_p2 = params[offset + 6]; float b_p3 = params[offset + 7]; float b_p4 = params[offset + 8]; float b_p5 = params[offset + 9];
     float p_p1 = params[offset + 10]; float p_p2 = params[offset + 11]; float p_p3 = params[offset + 12]; float p_p4 = params[offset + 13]; float p_p5 = params[offset + 14];
     
+    
     float risk_per_trade = 0.02f; 
 
     // --- STATE ---
-    float balance = 50.0f;
-    float max_equity = 50.0f;
+    float balance = initial_balance;        // Use real balance from API
+    float max_equity = initial_balance;
     float max_dd = 0.0f;
     int total_trades = 0;
     int total_wins = 0;
@@ -146,7 +148,9 @@ __kernel void portfolio_kernel(
                     if (balance > max_equity) max_equity = balance;
                     float dd = max_equity - balance;
                     if (dd > max_dd) max_dd = dd;
-                    if (dd >= 10.0f) { balance = -50.0f; i = num_candles; break; }
+                    // Death condition: 35% drawdown (was 20%)
+                    float dd_threshold = initial_balance * 0.35f;
+                    if (dd >= dd_threshold) { balance = -initial_balance; i = num_candles; break; }
                 } else active_count++;
             }
         }
@@ -199,7 +203,7 @@ __kernel void portfolio_kernel(
     }
     
     int res_offset = gid * 4;
-    results[res_offset + 0] = balance - 50.0f;
+    results[res_offset + 0] = balance - initial_balance;  // Net profit
     results[res_offset + 1] = (float)total_trades;
     results[res_offset + 2] = (float)total_wins;
     results[res_offset + 3] = max_dd;
@@ -258,7 +262,8 @@ class CPUEngine:
 # GPU ENGINE (Background Optimization)
 # =============================================================================
 class GPUEngine:
-    def __init__(self):
+    def __init__(self, initial_balance=50.0):
+        self.initial_balance = initial_balance  # Store balance for kernel
         try:
             # Detect BOTH GPUs
             self.intel_device = None
@@ -298,6 +303,11 @@ class GPUEngine:
             print(f"❌ GPU Init Error: {e}")
             self.intel_ctx = None
             self.nvidia_ctx = None
+    
+    def set_balance(self, new_balance):
+        """Update initial balance for optimization"""
+        self.initial_balance = new_balance
+        print(f"💰 GPU Engine: Balance updated to ${new_balance}")
 
     def _generate_grid(self):
         # FULL FACTORIAL GRID - Each strategy gets INDEPENDENT parameters
@@ -544,7 +554,9 @@ class GPUEngine:
                 
                 prg.portfolio_kernel(queue, (len(params),), None,
                     b_c, b_o, b_h, b_l, b_a, b_hr,
-                    np.int32(len(c)), b_p, b_res)
+                    np.int32(len(c)), 
+                    np.float32(self.initial_balance),  # NEW: Pass real balance
+                    b_p, b_res)
                 queue.finish()
                 cl.enqueue_copy(queue, res, b_res)
                 
@@ -680,9 +692,10 @@ class GPUEngine:
 # HYBRID SYSTEM (The Orchestrator)
 # =============================================================================
 class HybridTrader:
-    def __init__(self):
+    def __init__(self, initial_balance=50.0):
+        self.initial_balance = initial_balance
         self.cpu = CPUEngine(DEFAULT_PARAMS)
-        self.gpu = GPUEngine()
+        self.gpu = GPUEngine(initial_balance=initial_balance)  # Pass balance to GPU
         
         self.history =[]
         self.optimization_queue = queue.Queue()
@@ -815,16 +828,6 @@ def run_live_trading():
     print("TITAN PRO - LIVE HYBRID TRADING (DERIV API)")
     print("="*50)
     print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
-    print(f"💰 Balance: $50 (Start)")
-    print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
-    print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
-    print("="*50)
-    
-    trader = HybridTrader()
-    trader.initialize_with_history() # Pre-flight check
-    
-    trader = HybridTrader()
-    trader.initialize_with_history() # Pre-flight check
     
     # Fallback: Try to load token from config if not set
     global API_TOKEN
@@ -838,10 +841,31 @@ def run_live_trading():
                     API_TOKEN = config.get('deriv_token')
         except:
             pass
-
-    if not API_TOKEN and DATA_SOURCE == 'deriv':
-        print("❌ Error: API Token not set! Run launcher.py to configure.")
+    
+    if not API_TOKEN:
+        print("❌ API Token not set! Run launcher.py")
         return
+    
+    # Connect to Deriv and get real balance
+    print("🔌 Connecting to Deriv API...")
+    temp_client = DerivClient(API_TOKEN, symbol=SELECTED_SYMBOL)
+    connected = temp_client.start(lambda t: None)
+    
+    if not connected:
+        print("❌ Failed to connect to Deriv API")
+        return
+    
+    time.sleep(1)  # Wait for auth
+    real_balance, currency = temp_client.get_balance()
+    
+    print(f"💰 Balance: {real_balance} {currency}")
+    print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
+    print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
+    print("="*50)
+    
+    # Initialize trader with real balance
+    trader = HybridTrader(initial_balance=real_balance)
+    trader.initialize_with_history()  # Pre-flight check
 
     client = DerivClient(token=API_TOKEN)
     
