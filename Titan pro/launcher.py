@@ -49,8 +49,24 @@ def select_market():
             
             if choice_num == 0:
                 print("\n🔄 Updating Titan Pro...")
-                os.system("git pull")
-                print("\n✅ Update complete! Please restart the launcher.")
+                
+                # Check if .git directory exists
+                launcher_dir = os.path.dirname(os.path.abspath(__file__))
+                git_dir = os.path.join(launcher_dir, '..', '.git')
+                
+                if not os.path.exists(git_dir):
+                    print("\n⚠️  Git repository not detected!")
+                    print("   This installation was done via the installer.")
+                    print("\n   To update, run the installer again:")
+                    print("   irm https://raw.githubusercontent.com/LucassVal/TitanFusion-cBot/main/install.ps1 | iex")
+                    input("\nPress Enter to continue...")
+                    continue
+                
+                result = os.system("git pull")
+                if result == 0:
+                    print("\n✅ Update complete! Please restart the launcher.")
+                else:
+                    print("\n❌ Update failed. Please check your git configuration.")
                 input("Press Enter to exit...")
                 sys.exit()
             
