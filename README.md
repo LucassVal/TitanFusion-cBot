@@ -1,241 +1,475 @@
 # 🚀 Titan Pro - Hybrid GPU Trading System
 
-**Advanced multi-strategy trading bot with dual GPU optimization and Walk-Forward validation**
+**Advanced multi-strategy algorithmic trading bot with GPU-accelerated optimization for Deriv (Synthetic Indices) and Forex markets.**
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![GPU](https://img.shields.io/badge/GPU-CUDA%20%2B%20OpenCL-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+![Status](https://img.shields.io/badge/Status-Production-success)
 
 ---
 
-## 🎯 Features
-
-- **Dual GPU Processing**: Intel + NVIDIA GPUs working in parallel
-- **100k Parameter Combinations**: Exhaustive grid search optimization
-- **Walk-Forward Validation**: 70/30 train/test split with anti-overfitting
-- **Multi-Strategy**: Scalper, Breakout, and Pullback strategies
-- **Auto-Update**: Weekly data refresh and re-calibration
-- **Institutional Data**: Dukascopy (real markets) + Deriv (synthetics)
-- **Multi-Timeframe**: M1, M5, M15, M30, H1 support
-- **8 Markets**: 4 real (XAUUSD, EURUSD, USDJPY, GBPUSD) + 4 synthetic (R_75, R_100, R_25, R_50)
-
----
-
-## 📊 System Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│           TITAN PRO HYBRID SYSTEM                   │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  ┌──────────────┐         ┌──────────────┐        │
-│  │  CPU Engine  │         │  GPU Engine  │        │
-│  │  <1ms Trade  │         │  100k Combos │        │
-│  │   Execution  │         │  Optimization│        │
-│  └──────┬───────┘         └──────┬───────┘        │
-│         │                        │                 │
-│         │    ┌──────────────────┘                 │
-│         │    │                                     │
-│    ┌────▼────▼────┐                               │
-│    │ Data Manager │                               │
-│    │  Auto-Update │                               │
-│    └──────┬───────┘                               │
-│           │                                        │
-│  ┌────────▼────────────┐                          │
-│  │  Dukascopy + Deriv  │                          │
-│  │   3 Months History  │                          │
-│  └─────────────────────┘                          │
-└─────────────────────────────────────────────────────┘
-```
+## 📋 Table of Contents
+- [Quick Start](#-quick-start)
+- [Key Features](#-key-features)
+- [Trading Strategies](#-trading-strategies-detailed)
+- [System Architecture](#-system-architecture)
+- [Risk Management](#%EF%B8%8F-risk-management-system)
+- [Installation](#-installation)
+- [Configuration](#%EF%B8%8F-configuration)
+- [Performance](#-performance-metrics)
 
 ---
 
-## 🚀 Quick Start
+## ⚡ Quick Start
 
-### **⚡ One-Line Installer (Recommended)**
-Open **PowerShell** as Administrator and run:
+### One-Line Installer
 ```powershell
 irm https://raw.githubusercontent.com/LucassVal/TitanFusion-cBot/main/install.ps1 | iex
 ```
 
-### **Manual Installation**
-**1. Install Dependencies**
+### Manual Installation
 ```bash
-pip install pandas pandas_ta numpy pyopencl websockets requests
-```
+# 1. Clone repository
+git clone https://github.com/LucassVal/TitanFusion-cBot.git
+cd TitanFusion-cBot
 
-**2. Run Launcher**
-```bash
+# 2. Install dependencies
+pip install pandas pandas_ta numpy pyopencl websockets requests
+
+# 3. Run launcher
 cd "Titan pro"
 python launcher.py
 ```
 
-### **3. Select Market & Timeframe**
-```
-📊 SELECT MARKET:
-[1-4] Synthetic (24/7)
-[5-8] Real Forex
+---
 
-⏰ SELECT TIMEFRAME:
-[1-5] M1, M5, M15, M30, H1
-```
+## 🎯 Key Features
 
-### **4. Auto-Download & Trade**
-System automatically:
-- Downloads 3 months of data
-- Optimizes 100k parameter combinations
-- Validates with Walk-Forward (70/30)
-- Starts live trading with best parameters
+### 💰 Smart Capital Management
+- **Real Balance Integration**: Fetches actual Deriv account balance
+- **Working Capital Selection**: Trade with a fraction (e.g., 50%) or full balance
+- **Dynamic Position Sizing**: Risk calculated on working capital
+
+### 🛡️ Tiered Drawdown Protection
+| Phase | DD Limit | Purpose |
+|-------|----------|---------|
+| Training | 15% | Find conservative parameters |
+| Validation | 20% | Test robustness |
+| Live Trading | 12% | Maximum capital protection |
+
+### 🧠 Dual GPU Optimization
+- **100,000 Parameter Combinations** tested in parallel
+- **Intel + NVIDIA GPUs** working simultaneously
+- **Walk-Forward Validation** (70/30 train/test split)
+- **Anti-Overfitting Measures** built into fitness function
+
+### 📈 5% Daily Profit Target
+- Optimized fitness function rewards 4-6% daily returns
+- Realistic compounding expectations
+- Conservative risk per trade (2-4%)
+
+### 🔄 Auto-Reconnection
+- **Ping Keepalive**: Every 30 seconds
+- **Exponential Backoff**: 2s → 4s → 8s → 16s → 30s
+- **Auto-Resubscribe**: Seamless tick stream recovery
 
 ---
 
-## 📁 File Structure
+## 🎲 Trading Strategies (DETAILED)
+
+Titan Pro uses a **multi-strategy portfolio** approach where THREE independent strategies compete for two simultaneous position slots. The system uses GPU optimization to find the best parameter combination for each strategy.
+
+---
+
+### 1️⃣ SCALPER (RSI Mean Reversion)
+
+**Philosophy**: Exploit overbought/oversold extremes with quick reversals.
+
+#### Entry Rules 📊
+
+**BUY Conditions**:
+```python
+1. RSI crosses ABOVE oversold threshold (default: 30)
+   - Previous RSI <= oversold_level
+   - Current RSI > oversold_level
+2. Time filter: 7 AM - 8 PM (UTC)
+3. Volatility filter: ATR between 2.5 and 500 pips
+4. Less than 2 active positions
+```
+
+**SELL Conditions**:
+```python
+1. RSI crosses BELOW overbought threshold (default: 70)
+   - Previous RSI >= overbought_level
+   - Current RSI < overbought_level
+2. Same time and volatility filters as BUY
+```
+
+#### Exit Rules 🎯
+
+**Take Profit**:
+```
+TP Distance = ATR × TP_Multiplier × 0.10
+Default TP_Multiplier: 3.0
+Example: ATR=50 pips → TP = 50 × 3.0 × 0.10 = 15 pips
+```
+
+**Stop Loss**:
+```
+SL Distance = ATR × SL_Multiplier × 0.10
+Default SL_Multiplier: 2.0
+Example: ATR=50 pips → SL = 50 × 2.0 × 0.10 = 10 pips
+```
+
+#### Parameters Optimized 🔧
+| Parameter | Range | Purpose |
+|-----------|-------|---------|
+| RSI Period | 5-14 | Sensitivity of RSI indicator |
+| Oversold | 20-40 | BUY trigger threshold |
+| Overbought | 60-80 | SELL trigger threshold |
+| TP Multiplier | 1.5-5.0 | Profit target (ATR multiple) |
+| SL Multiplier | 1.0-3.0 | Stop loss (ATR multiple) |
+
+#### Best For 🎯
+- Ranging/sideways markets
+- High volatility synthetic indices (R_75, R_100)
+- Quick scalps (5-15 minute trades)
+
+---
+
+### 2️⃣ BREAKOUT (Bollinger Band Squeeze + Momentum)
+
+**Philosophy**: Capture explosive moves when price breaks out of consolidation.
+
+#### Entry Rules 📊
+
+**BUY Conditions**:
+```python
+1. Bollinger Band Squeeze detected:
+   - Band Width = (Upper BB - Lower BB) × 10
+   - Width <= Max_Width threshold (default: 500 pips)
+
+2. Strong bullish candle:
+   - Close > Upper Bollinger Band
+   - Candle body >= 50% of total range
+   - Close > Open (bullish candle)
+
+3. Momentum confirmation:
+   - RSI(14) > 55 (bullish momentum)
+   - Close > EMA(100) (above trend)
+
+4. Time & volatility filters (same as Scalper)
+```
+
+**SELL Conditions**:
+```python
+1. Bollinger Band Squeeze detected (same as BUY)
+
+2. Strong bearish candle:
+   - Close < Lower Bollinger Band
+   - Candle body >= 50% of total range
+   - Close < Open (bearish candle)
+
+3. Momentum confirmation:
+   - RSI(14) < 45 (bearish momentum)
+   - Close < EMA(100) (below trend)
+```
+
+#### Exit Rules 🎯
+
+**Take Profit**:
+```
+TP Distance = ATR × TP_Multiplier × 0.10
+Default TP_Multiplier: 5.0 (wider than Scalper)
+Example: ATR=50 pips → TP = 50 × 5.0 × 0.10 = 25 pips
+```
+
+**Stop Loss**:
+```
+SL Distance = ATR × SL_Multiplier × 0.10
+Default SL_Multiplier: 2.0
+Example: ATR=50 pips → SL = 50 × 2.0 × 0.10 = 10 pips
+```
+
+#### Parameters Optimized 🔧
+| Parameter | Range | Purpose |
+|-----------|-------|---------|
+| BB Period | 10-30 | Bollinger Band lookback |
+| BB Deviation | 1.5-2.5 | Standard deviations for bands |
+| Max Width | 200-1000 pips | Squeeze detection threshold |
+| TP Multiplier | 2.0-10.0 | Profit target (larger moves) |
+| SL Multiplier | 1.0-3.0 | Stop loss |
+
+#### Best For 🎯
+- Trend initiation
+- News events / high volatility
+- Breakout from consolidation
+
+---
+
+### 3️⃣ PULLBACK (EMA Trend Following)
+
+**Philosophy**: Enter on retracements in the direction of the major trend.
+
+#### Entry Rules 📊
+
+**BUY Conditions**:
+```python
+1. Uptrend confirmed:
+   - Fast EMA (default: 34) > Slow EMA (default: 144)
+
+2. Pullback detected:
+   - RSI(14) < RSI_Trigger (default: 40)
+   - Price retraced but trend intact
+
+3. Time & volatility filters (same as others)
+```
+
+**SELL Conditions**:
+```python
+1. Downtrend confirmed:
+   - Fast EMA < Slow EMA
+
+2. Pullback detected:
+   - RSI(14) > (100 - RSI_Trigger)
+   - Default: RSI > 60
+
+3. Same filters as BUY
+```
+
+#### Exit Rules 🎯
+
+**Take Profit**:
+```
+TP Distance = ATR × TP_Multiplier × 0.10
+Default TP_Multiplier: 4.0
+Example: ATR=50 pips → TP = 50 × 4.0 × 0.10 = 20 pips
+```
+
+**Stop Loss**:
+```
+SL Distance = ATR × SL_Multiplier × 0.10
+Default SL_Multiplier: 2.0
+Example: ATR=50 pips → SL = 50 × 2.0 × 0.10 = 10 pips
+```
+
+#### Parameters Optimized 🔧
+| Parameter | Range | Purpose |
+|-----------|-------|---------|
+| Fast EMA | 20-50 | Short-term trend |
+| Slow EMA | 100-200 | Long-term trend |
+| RSI Trigger | 30-50 | Pullback detection level |
+| TP Multiplier | 2.0-6.0 | Profit target |
+| SL Multiplier | 1.0-3.0 | Stop loss |
+
+#### Best For 🎯
+- Strong trending markets
+- Forex pairs (EUR/USD, XAU/USD)
+- Continuation moves
+
+---
+
+## 🎯 Strategy Priority System
+
+When multiple strategies trigger simultaneously, priority is:
 
 ```
-Titan pro/
-├── launcher.py .................. Interactive menu
-├── titan_hybrid.py .............. Main trading engine
-├── data_manager.py .............. Data download & caching
-├── deriv_client.py .............. Deriv API connector
-├── deriv_downloader.py .......... Deriv data downloader
-├── dukascopy_downloader.py ...... Dukascopy data downloader
-├── dashboard.html ............... Visual monitoring dashboard
-├── check_cuda.py ................ GPU verification tool
-└── data_cache.json .............. Update tracking (auto-created)
+1st Priority: SCALPER
+2nd Priority: PULLBACK  
+3rd Priority: BREAKOUT
+```
 
-Data files (auto-downloaded):
-├── dukascopy_XAUUSD_M1_3months.csv
-├── dukascopy_EURUSD_M1_3months.csv
-├── deriv_R_75_M1_3months.csv
-└── deriv_R_100_M1_3months.csv
+**Rationale**: Scalper has highest win rate, Pullback has best risk/reward, Breakout is most volatile.
+
+**Position Slots**: Maximum 2 concurrent positions (prevents overexposure).
+
+---
+
+## 🛡️ Risk Management System
+
+### Position Sizing Formula
+```python
+position_size = (working_capital × risk_per_trade) / (stop_loss_distance × 10)
+
+Example:
+- Working Capital: $50
+- Risk per Trade: 2% = $1.00
+- SL Distance: 10 pips
+- Position Size = ($50 × 0.02) / (10 × 10) = $1.00 / 100 = 0.01 lots
+```
+
+### Drawdown Contingencies
+
+**Training Phase (15% DD)**:
+- Purpose: Find only ultra-robust parameters
+- Action if hit: Parameter combo rejected immediately
+- Result: Only conservative strategies pass
+
+**Validation Phase (20% DD)**:
+- Purpose: Stress-test in adverse market
+- Action if hit: Parameter combo rejected
+- Result: Ensures no overfitting
+
+**Live Trading (12% DD)**:
+- Purpose: Protect real capital
+- Action if hit: **STOP ALL TRADING**
+- Recovery: Manual review required
+
+### Daily Stops
+
+**Daily Profit Goal** (Default: 5% of working capital):
+```
+Action: PAUSE trading for rest of the day
+Reason: Prevent giving back gains
+```
+
+**Max Daily Loss** (Default: 5% of working capital):
+```
+Action: STOP trading for rest of the day
+Reason: Prevent snowballing losses
+```
+
+**Consecutive Losses** (3 in a row):
+```
+Action: PAUSE for 1 hour
+Reason: Possible adverse market conditions
+```
+
+---
+
+## 🏗️ System Architecture
+
+```
+┌────────────────────────────────────────────────────────┐
+│                    LAUNCHER.PY                         │
+│  • Fetch Deriv Balance                                 │
+│  • Select Working Capital                              │
+│  • Configure Risk Parameters                           │
+│  • Download Historical Data (3 months)                 │
+└────────────────────┬───────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────┐
+│                 TITAN_HYBRID.PY                        │
+│                                                        │
+│  ┌──────────────────────────────────────────────┐    │
+│  │         GPU ENGINE (OpenCL)                  │    │
+│  │  ┌────────────────────────────────────┐      │    │
+│  │  │  Phase 1: TRAINING (15% DD)        │      │    │
+│  │  │  • Test 100k combinations          │      │    │
+│  │  │  • Find best on 70% of data        │      │    │
+│  │  └────────────────────────────────────┘      │    │
+│  │  ┌────────────────────────────────────┐      │    │
+│  │  │  Phase 2: VALIDATION (20% DD)      │      │    │
+│  │  │  • Test best on remaining 30%      │      │    │
+│  │  │  • Reject if overfitted            │      │    │
+│  │  └────────────────────────────────────┘      │    │
+│  └──────────────────────────────────────────────┘    │
+│                     │                                  │
+│                     ▼                                  │
+│  ┌──────────────────────────────────────────────┐    │
+│  │      CPU ENGINE (Live Trading)               │    │
+│  │  • Execute with Phase 3 params (12% DD)      │    │
+│  │  • <1ms latency per candle                   │    │
+│  │  • Track P&L, DD, Win Rate                   │    │
+│  └──────────────────────────────────────────────┘    │
+└────────────────────┬───────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────┐
+│               DERIV_CLIENT.PY                          │
+│  • WebSocket connection to Deriv API                   │
+│  • Ping keepalive (30s)                                │
+│  • Auto-reconnect with backoff                         │
+│  • Real-time tick streaming                            │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-### **Optimization Settings**
+### Launcher Options
+
+**1. Market Selection**:
+- Synthetic: R_75, R_100, R_25, R_50
+- Forex: EUR/USD, USD/JPY, XAU/USD, GBP/USD
+
+**2. Timeframe**:
+- M1, M5, M15 (recommended), M30, H1
+
+**3. Risk Per Trade**:
+- Range: 0.1% - 10%
+- Default: 2%
+
+**4. Daily Profit Goal**:
+- Dollar amount (e.g., $50)
+- Target: 5% of working capital
+
+**5. Max Daily Loss**:
+- Dollar amount (e.g., $25)
+- Limit: 5% of working capital
+
+**6. Working Capital**:
+- Enter dollar amount: `50`
+- Or percentage: `50%`, `100%`
+
+### Advanced Parameters
+
+Edit `titan_hybrid.py` to customize:
+
 ```python
-# titan_hybrid.py
+# Optimization
 OPTIMIZATION_INTERVAL = 100  # Re-optimize every 100 candles
-HISTORY_SIZE = 8640          # Keep last 8640 candles (~3 months M15)
+HISTORY_SIZE = 8640          # Keep 90 days of M15 data
+
+# Walk-Forward
 WALK_FORWARD_TRAIN_SIZE = 0.7  # 70% training
 WALK_FORWARD_TEST_SIZE = 0.3   # 30% validation
 ```
 
-### **Auto-Update**
-```python
-# data_manager.py
-manager.needs_update(source, days=7)  # Check if data >7 days old
-```
-
 ---
 
-## 🧠 Optimization Strategy
+## 📊 Performance Metrics
 
-### **Grid Search**
-- **100,000 combinations** tested
-- 3 strategies with independent parameters
-- Dual GPU parallel processing (~1-2 min)
+### Expected Performance
+- **Win Rate**: 55-65% (after optimization)
+- **Average RR**: 1.5:1 to 2.5:1
+- **Max Drawdown**: <12% (live), <20% (validation)
+- **Daily Volatility**: 3-7% of capital
 
-### **Walk-Forward Validation**
-```python
-1. Split data: 70% train | 30% test
-2. Find best params on train set
-3. Validate on unseen test data
-4. Only update if:
-   - Test fitness > -999k (no death condition)
-   - Performance ratio ≥ 50% vs train
-```
-
-### **Anti-Overfitting Measures**
-- Win rate penalties (>75% = suspicious)
-- Profit factor limits (<1.2 or >5.0 = rejected)
-- Trade count validation (20-500 trades)
-- Drawdown hard stop (≥20% = death)
-
----
-
-## 📈 Supported Markets
-
-### **Real Markets** (Dukascopy Data)
-- XAUUSD (Gold)
-- EURUSD
-- USDJPY
-- GBPUSD
-
-### **Synthetic Markets** (Deriv Data)
-- R_75 (Volatility 75 Index)
-- R_100 (Volatility 100 Index)
-- R_25 (Volatility 25 Index)
-- R_50 (Volatility 50 Index)
-
----
-
-## 🔄 Weekly Re-Calibration
-
-System automatically:
-1. Checks data age every 7 days
-2. Downloads fresh data
-3. Re-optimizes 100k combinations
-4. Validates with Walk-Forward
-5. Updates parameters if validation passes
-
----
-
-## 📊 Dashboard
-
-Open `dashboard.html` in browser for real-time monitoring:
-- 3 strategies with individual fitness scores
-- Winner/Active/Standby status
-- Trade history with P&L
-- Parameter display per strategy
-
-*(WebSocket backend in development)*
-
----
-
-## 🛠️ Technical Stack
-
-- **Language**: Python 3.12
-- **GPU**: PyOpenCL (Intel + NVIDIA)
-- **Indicators**: pandas_ta
-- **Data Sources**: Dukascopy (real), Deriv (synthetic)
-- **Optimization**: Random Search + Walk-Forward
-
----
-
-## ⚠️ Risk Management
-
-- **Max Drawdown**: 20% (hard stop)
-- **Risk per Trade**: 2% of balance
-- **Max Active Trades**: 2 (Central Engine limit)
-- **Validation**: Walk-Forward prevents overfitting
+### Optimization Speed
+- **100k Combinations**: ~2-3 minutes
+- **Dual GPU**: 50% faster than single GPU
+- **Re-calibration**: Weekly or every 100 candles
 
 ---
 
 ## 📝 License
 
-MIT License - Feel free to use and modify
+MIT License - Open Source
 
 ---
 
 ## 🤝 Contributing
 
-Pull requests welcome! Please:
-1. Fork the repository
-2. Create feature branch
-3. Test thoroughly
-4. Submit PR with description
+Pull requests welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## ⚠️ Disclaimer
+
+**Trading involves substantial risk**. Past performance does not guarantee future results. Only trade with capital you can afford to lose. This bot is provided "as-is" without warranty.
 
 ---
 
 ## 📧 Contact
 
-**Lucas Valério**
-- GitHub: [@LucassVal](https://github.com/LucassVal)
-- Project: [TitanFusion-cBot](https://github.com/LucassVal/TitanFusion-cBot)
+- **Author**: Lucas Valério
+- **GitHub**: [@LucassVal](https://github.com/LucassVal)
+- **Project**: [TitanFusion-cBot](https://github.com/LucassVal/TitanFusion-cBot)
 
 ---
 
-**⚡ Titan Pro - Industrial-Grade Algorithmic Trading**
+**⚡ Titan Pro - Precision. Power. Profit.**
