@@ -17,26 +17,30 @@ from datetime import datetime, timedelta
 # Global variables (will be set by launcher.py)
 SELECTED_SYMBOL = "R_75"
 SELECTED_TIMEFRAME = "15min"  # pandas resample format
-SELECTED_TF_MINUTES = 15
-# Auto-detect source for standalone execution
-DATA_SOURCE = "deriv" if SELECTED_SYMBOL.startswith("R_") else "dukascopy"
-API_TOKEN = None  # Set by launcher
-
-# Risk Management (Set by launcher)
-RISK_PER_TRADE = 0.02      # 2%
-DAILY_PROFIT_GOAL = 50.0   # $50
-MAX_DAILY_LOSS = 25.0      # $25
-TOTAL_PROFIT_TARGET = 1000.0 # $1000
-
-# Balance Management (Set by launcher for Deriv)
 WORKING_CAPITAL = 50.0     # Amount to trade with
 ACCOUNT_BALANCE = 50.0     # Full account balance
 
 # Initial "Safe" Parameters (Fallback)
 DEFAULT_PARAMS = {
-    'scalper': {'rsi_period': 10, 'os': 30, 'ob': 70, 'tp': 3.0, 'sl': 2.0},
-    'breakout': {'bb_period': 20, 'dev': 2.0, 'max_w': 500, 'tp': 5.0, 'sl': 2.0},
-    'pullback': {'fast': 34, 'slow': 144, 'trig': 40, 'tp': 4.0, 'sl': 2.0},
+    'scalper': {
+        'rsi_period': 10, 'rsi_buy': 30, 'rsi_sell': 70,
+        'atr_min': 5, 'atr_max': 200, 'adx_min': 20,
+        'hour_start': 0, 'hour_end': 23,
+        'tp': 3.0, 'sl': 2.0, 'body_min': 0.5
+    },
+    'breakout': {
+        'bb_period': 20, 'dev': 2.0, 
+        'min_w': 10, 'max_w': 500,
+        'rsi_thresh': 50, 'ema_period': 100,
+        'body_min': 0.5, 'atr_min': 5,
+        'tp': 5.0, 'sl': 2.0
+    },
+    'pullback': {
+        'fast': 34, 'slow': 144,
+        'rsi_buy': 40, 'rsi_sell': 60,
+        'adx_min': 25, 'atr_min': 5,
+        'tp': 4.0, 'sl': 2.0
+    },
     'risk': 0.02
 }
 
@@ -72,6 +76,26 @@ float get_rsi_next(float close, float prev_close, float avg_gain, float avg_loss
     return 100.0f - (100.0f / (1.0f + rs));
 }
 
+// ADX Helper (Simplified for stream processing)
+void update_adx(float high, float low, float close, float prev_high, float prev_low, float prev_close, 
+                float* tr_smooth, float* dm_p_smooth, float* dm_m_smooth, float* adx_val, int period) {
+    
+    float tr = fmax(high - low, fmax(fabs(high - prev_close), fabs(low - prev_close)));
+    float dm_p = (high - prev_high > prev_low - low) ? fmax(high - prev_high, 0.0f) : 0.0f;
+    float dm_m = (prev_low - low > high - prev_high) ? fmax(prev_low - low, 0.0f) : 0.0f;
+    
+    float alpha = 1.0f / period;
+    *tr_smooth = *tr_smooth * (1.0f - alpha) + tr * alpha;
+    *dm_p_smooth = *dm_p_smooth * (1.0f - alpha) + dm_p * alpha;
+    *dm_m_smooth = *dm_m_smooth * (1.0f - alpha) + dm_m * alpha;
+    
+    float di_p = (*tr_smooth > 0) ? (*dm_p_smooth / *tr_smooth) * 100.0f : 0.0f;
+    float di_m = (*tr_smooth > 0) ? (*dm_m_smooth / *tr_smooth) * 100.0f : 0.0f;
+    
+    float dx = (di_p + di_m > 0) ? (fabs(di_p - di_m) / (di_p + di_m)) * 100.0f : 0.0f;
+    *adx_val = *adx_val * (1.0f - alpha) + dx * alpha;
+}
+
 // --- MAIN KERNEL ---
 __kernel void portfolio_kernel(
     __global const float* close,
@@ -81,65 +105,125 @@ __kernel void portfolio_kernel(
     __global const float* atr,
     __global const int* hour,
     const int num_candles,
-    const float initial_balance,   // User's working capital
-    const int optimization_phase,  // 0=train(15%), 1=validate(20%), 2=live(12%)
-    __global const float* params,   // [S_P1..P5, B_P1..P5, P_P1..P5]
-    __global float* results         // [NetProfit, Trades, Wins, MaxDD]
+    const float initial_balance,
+    const int optimization_phase,  // 0=train(25%), 1=validate(30%), 2=live(12%)
+    __global const float* params,  // 40 params per combo
+    __global float* results        // [NetProfit, Trades, Wins, MaxDD, TotalMFE, TotalMAE]
 ) {
     int gid = get_global_id(0);
-    int offset = gid * 15; 
+    int offset = gid * 40; 
     
-    // --- PARAMS ---
-    float s_p1 = params[offset + 0]; float s_p2 = params[offset + 1]; float s_p3 = params[offset + 2]; float s_p4 = params[offset + 3]; float s_p5 = params[offset + 4];
-    float b_p1 = params[offset + 5]; float b_p2 = params[offset + 6]; float b_p3 = params[offset + 7]; float b_p4 = params[offset + 8]; float b_p5 = params[offset + 9];
-    float p_p1 = params[offset + 10]; float p_p2 = params[offset + 11]; float p_p3 = params[offset + 12]; float p_p4 = params[offset + 13]; float p_p5 = params[offset + 14];
+    // --- UNPACK PARAMS (40 total) ---
+    // Scalper (15 params)
+    float s_rsi_period = params[offset + 0];
+    float s_rsi_buy    = params[offset + 1];
+    float s_rsi_sell   = params[offset + 2];
+    float s_atr_min    = params[offset + 3];
+    float s_atr_max    = params[offset + 4];
+    float s_adx_min    = params[offset + 5];
+    float s_hour_start = params[offset + 6];
+    float s_hour_end   = params[offset + 7];
+    float s_tp_atr     = params[offset + 8];
+    float s_sl_atr     = params[offset + 9];
+    float s_body_min   = params[offset + 10];
     
+    // Breakout (12 params) - Offset 15
+    float b_bb_period  = params[offset + 15];
+    float b_bb_dev     = params[offset + 16];
+    float b_min_width  = params[offset + 17];
+    float b_max_width  = params[offset + 18];
+    float b_rsi_thresh = params[offset + 19];
+    float b_ema_period = params[offset + 20];
+    float b_body_min   = params[offset + 21];
+    float b_atr_min    = params[offset + 22];
+    float b_tp_atr     = params[offset + 23];
+    float b_sl_atr     = params[offset + 24];
+    
+    // Pullback (13 params) - Offset 27
+    float p_fast_ema   = params[offset + 27];
+    float p_slow_ema   = params[offset + 28];
+    float p_rsi_buy    = params[offset + 29];
+    float p_rsi_sell   = params[offset + 30];
+    float p_adx_min    = params[offset + 31];
+    float p_atr_min    = params[offset + 32];
+    float p_tp_atr     = params[offset + 33];
+    float p_sl_atr     = params[offset + 34];
     
     float risk_per_trade = 0.02f; 
 
     // --- STATE ---
-    float balance = initial_balance;        // Use real balance from API
+    float balance = initial_balance;
     float max_equity = initial_balance;
     float max_dd = 0.0f;
     int total_trades = 0;
     int total_wins = 0;
+    float total_mfe = 0.0f;
+    float total_mae = 0.0f;
     
     int pos_type[2] = {0, 0};
     float pos_entry[2] = {0.0f, 0.0f};
     float pos_sl[2] = {0.0f, 0.0f};
     float pos_tp[2] = {0.0f, 0.0f};
     float pos_vol[2] = {0.0f, 0.0f};
+    float pos_mfe[2] = {0.0f, 0.0f};
+    float pos_mae[2] = {0.0f, 0.0f};
     
-    // Indicators
-    float s_rsi_gain = 0.0f; float s_rsi_loss = 0.0f; float s_rsi = 50.0f; float s_rsi_prev = 50.0f;
-    float bb_buffer[30]; int bb_idx = 0; float bb_sum = 0.0f;
-    for(int k=0; k<30; k++) bb_buffer[k] = close[0];
-    bb_sum = close[0] * 30;
-    float b_rsi_gain = 0.0f; float b_rsi_loss = 0.0f; float b_rsi = 50.0f; float b_ema = close[0];
-    float p_ema_fast = close[0]; float p_ema_slow = close[0]; float p_rsi_gain = 0.0f; float p_rsi_loss = 0.0f; float p_rsi = 50.0f;
+    // Indicators State
+    float s_rsi_gain = 0.0f, s_rsi_loss = 0.0f, s_rsi = 50.0f, s_rsi_prev = 50.0f;
+    
+    // BB State
+    float bb_buffer[50]; int bb_idx = 0; float bb_sum = 0.0f;
+    for(int k=0; k<50; k++) bb_buffer[k] = close[0];
+    bb_sum = close[0] * 50; 
+    
+    // Breakout Indicators
+    float b_rsi_gain = 0.0f, b_rsi_loss = 0.0f, b_rsi = 50.0f;
+    float b_ema = close[0];
+    
+    // Pullback Indicators
+    float p_ema_fast = close[0], p_ema_slow = close[0];
+    float p_rsi_gain = 0.0f, p_rsi_loss = 0.0f, p_rsi = 50.0f;
+    
+    // ADX State
+    float tr_smooth = 0.0f, dm_p_smooth = 0.0f, dm_m_smooth = 0.0f, adx_val = 0.0f;
     
     for (int i = 1; i < num_candles; i++) {
         float c = close[i]; float o = open[i]; float h = high[i]; float l = low[i];
-        float prev_c = close[i-1]; float atr_val = atr[i]; float atr_pips = atr_val * 10.0f;
+        float prev_c = close[i-1]; float prev_h = high[i-1]; float prev_l = low[i-1];
+        float atr_val = atr[i]; float atr_pips = atr_val * 10.0f;
         int h_day = hour[i];
         
         // Update Indicators
         s_rsi_prev = s_rsi;
-        s_rsi = get_rsi_next(c, prev_c, s_rsi_gain, s_rsi_loss, (int)s_p1, &s_rsi_gain, &s_rsi_loss);
+        s_rsi = get_rsi_next(c, prev_c, s_rsi_gain, s_rsi_loss, (int)s_rsi_period, &s_rsi_gain, &s_rsi_loss);
         
-        int bb_p = (int)b_p1;
-        bb_sum -= bb_buffer[bb_idx]; bb_buffer[bb_idx] = c; bb_sum += c; bb_idx = (bb_idx + 1) % bb_p;
+        // BB
+        int bb_p = (int)b_bb_period;
+        bb_sum -= bb_buffer[bb_idx]; bb_buffer[bb_idx] = c; bb_sum += c; bb_idx = (bb_idx + 1) % 50;
+        
         b_rsi = get_rsi_next(c, prev_c, b_rsi_gain, b_rsi_loss, 14, &b_rsi_gain, &b_rsi_loss);
-        b_ema = get_ema(b_ema, c, 100);
+        b_ema = get_ema(b_ema, c, (int)b_ema_period);
         
-        p_ema_fast = get_ema(p_ema_fast, c, (int)p_p1);
-        p_ema_slow = get_ema(p_ema_slow, c, (int)p_p2);
+        p_ema_fast = get_ema(p_ema_fast, c, (int)p_fast_ema);
+        p_ema_slow = get_ema(p_ema_slow, c, (int)p_slow_ema);
         p_rsi = get_rsi_next(c, prev_c, p_rsi_gain, p_rsi_loss, 14, &p_rsi_gain, &p_rsi_loss);
         
-        // Exits
+        update_adx(h, l, c, prev_h, prev_l, prev_c, &tr_smooth, &dm_p_smooth, &dm_m_smooth, &adx_val, 14);
+        
+        // --- EXITS & MFE/MAE ---
         int active_count = 0;
         for (int k=0; k<2; k++) {
             if (pos_type[k] != 0) {
+                float unrealized = 0.0f;
+                if (pos_type[k] == 1) unrealized = (h - pos_entry[k]) * 10.0f;
+                else unrealized = (pos_entry[k] - l) * 10.0f;
+                if (unrealized > pos_mfe[k]) pos_mfe[k] = unrealized;
+                
+                float drawdown = 0.0f;
+                if (pos_type[k] == 1) drawdown = (l - pos_entry[k]) * 10.0f;
+                else drawdown = (pos_entry[k] - h) * 10.0f;
+                if (drawdown < pos_mae[k]) pos_mae[k] = drawdown;
+
                 float pnl = 0.0f; bool closed = false;
                 if (pos_type[k] == 1) {
                     if (l <= pos_sl[k]) { pnl = (pos_sl[k] - pos_entry[k]) * 10.0f * pos_vol[k]; closed = true; }
@@ -148,65 +232,81 @@ __kernel void portfolio_kernel(
                     if (h >= pos_sl[k]) { pnl = (pos_entry[k] - pos_sl[k]) * 10.0f * pos_vol[k]; closed = true; }
                     else if (l <= pos_tp[k]) { pnl = (pos_entry[k] - pos_tp[k]) * 10.0f * pos_vol[k]; closed = true; }
                 }
+                
                 if (closed) {
-                    balance += pnl; total_trades++; if (pnl > 0) total_wins++; pos_type[k] = 0;
+                    balance += pnl; total_trades++; if (pnl > 0) total_wins++; 
+                    total_mfe += pos_mfe[k]; total_mae += pos_mae[k];
+                    pos_type[k] = 0; pos_mfe[k] = 0; pos_mae[k] = 0;
+                    
                     if (balance > max_equity) max_equity = balance;
                     float dd = max_equity - balance;
                     if (dd > max_dd) max_dd = dd;
                     
-                    // Tiered DD threshold based on phase
                     float dd_threshold;
-                    if (optimization_phase == 0) {
-                        dd_threshold = initial_balance * 0.15f;  // Training: 15%
-                    } else if (optimization_phase == 1) {
-                        dd_threshold = initial_balance * 0.20f;  // Validation: 20%
-                    } else {
-                        dd_threshold = initial_balance * 0.12f;  // Live: 12%
-                    }
+                    if (optimization_phase == 0) dd_threshold = initial_balance * 0.25f;
+                    else if (optimization_phase == 1) dd_threshold = initial_balance * 0.30f;
+                    else dd_threshold = initial_balance * 0.15f;
                     
                     if (dd >= dd_threshold) { 
-                        balance = -initial_balance; 
-                        i = num_candles; 
-                        break; 
+                        balance = -initial_balance; i = num_candles; break; 
                     }
                 } else active_count++;
             }
         }
-        if (balance \u003c 0) break;  // Death condition hit
+        if (balance < 0) break;
         
-        // Entries
-        bool time_ok = (h_day >= 7 && h_day < 20);
-        bool vol_ok = (atr_pips >= 2.5f && atr_pips <= 500.0f);
-        
-        if (active_count < 2 && i > 200 && time_ok && vol_ok) {
-            bool s_buy = (s_rsi_prev <= s_p2 && s_rsi > s_p2);
-            bool s_sell = (s_rsi_prev >= s_p3 && s_rsi < s_p3);
+        // --- ENTRIES ---
+        if (active_count < 2 && i > 200) {
+            float body_size = fabs(c - o);
+            float total_size = h - l;
+            float body_pct = (total_size > 0) ? body_size / total_size : 0.0f;
             
-            bool b_buy = false, b_sell = false;
+            // SCALPER
+            bool s_time = (h_day >= (int)s_hour_start && h_day <= (int)s_hour_end);
+            bool s_vol = (atr_pips >= s_atr_min && atr_pips <= s_atr_max);
+            bool s_trend = (adx_val >= s_adx_min);
+            bool s_body = (body_pct >= s_body_min);
+            
+            bool s_buy_sig = (s_time && s_vol && s_trend && s_body && s_rsi_prev <= s_rsi_buy && s_rsi > s_rsi_buy);
+            bool s_sell_sig = (s_time && s_vol && s_trend && s_body && s_rsi_prev >= s_rsi_sell && s_rsi < s_rsi_sell);
+            
+            // BREAKOUT
+            bool b_vol = (atr_pips >= b_atr_min);
+            bool b_body = (body_pct >= b_body_min);
+            
             float sma = bb_sum / bb_p; float sum_sq = 0.0f;
-            for(int j=0; j<bb_p; j++) { float d = close[i-j] - sma; sum_sq += d*d; }
+            int start_j = (bb_idx - 1 + 50) % 50; 
+            for(int j=0; j<bb_p; j++) { 
+                int idx = (start_j - j + 50) % 50;
+                float d = bb_buffer[idx] - sma; 
+                sum_sq += d*d; 
+            }
             float std = sqrt(sum_sq / bb_p);
-            float upper = sma + b_p2 * std; float lower = sma - b_p2 * std; float width = (upper - lower) * 10.0f;
-            if (width <= b_p3) {
-                 float body = fabs(c - o); float total = h - l;
-                 if (total > 0 && (body/total) >= 0.5f) {
-                     if (c > upper && b_rsi > 55 && c > b_ema) b_buy = true;
-                     else if (c < lower && b_rsi < 45 && c < b_ema) b_sell = true;
-                 }
+            float upper = sma + b_bb_dev * std; float lower = sma - b_bb_dev * std; float width = (upper - lower) * 10.0f;
+            
+            bool b_buy_sig = false, b_sell_sig = false;
+            if (b_vol && b_body && width >= b_min_width && width <= b_max_width) {
+                 if (c > upper && b_rsi > b_rsi_thresh && c > b_ema) b_buy_sig = true;
+                 else if (c < lower && b_rsi < (100-b_rsi_thresh) && c < b_ema) b_sell_sig = true;
             }
             
-            bool p_buy = false, p_sell = false;
-            bool uptrend = p_ema_fast > p_ema_slow; bool downtrend = p_ema_fast < p_ema_slow;
-            if (uptrend && p_rsi < p_p3) p_buy = true;
-            else if (downtrend && p_rsi > (100.0f - p_p3)) p_sell = true;
+            // PULLBACK
+            bool p_vol = (atr_pips >= p_atr_min);
+            bool p_trend = (adx_val >= p_adx_min);
+            bool uptrend = p_ema_fast > p_ema_slow;
+            bool downtrend = p_ema_fast < p_ema_slow;
             
+            bool p_buy_sig = (p_vol && p_trend && uptrend && p_rsi < p_rsi_buy);
+            bool p_sell_sig = (p_vol && p_trend && downtrend && p_rsi > p_rsi_sell);
+            
+            // EXECUTE
             int entry_dir = 0; float sl_m = 0, tp_m = 0;
-            if (s_buy) { entry_dir=1; sl_m=s_p5; tp_m=s_p4; }
-            else if (s_sell) { entry_dir=-1; sl_m=s_p5; tp_m=s_p4; }
-            else if (p_buy) { entry_dir=1; sl_m=p_p5; tp_m=p_p4; }
-            else if (p_sell) { entry_dir=-1; sl_m=p_p5; tp_m=p_p4; }
-            else if (b_buy) { entry_dir=1; sl_m=b_p5; tp_m=b_p4; }
-            else if (b_sell) { entry_dir=-1; sl_m=b_p5; tp_m=b_p4; }
+            if (s_buy_sig) { entry_dir=1; sl_m=s_sl_atr; tp_m=s_tp_atr; }
+            else if (s_sell_sig) { entry_dir=-1; sl_m=s_sl_atr; tp_m=s_tp_atr; }
+            else if (p_buy_sig) { entry_dir=1; sl_m=p_sl_atr; tp_m=p_tp_atr; }
+            else if (p_sell_sig) { entry_dir=-1; sl_m=p_sl_atr; tp_m=p_tp_atr; }
+            else if (b_buy_sig) { entry_dir=1; sl_m=b_sl_atr; tp_m=b_tp_atr; }
+            else if (b_sell_sig) { entry_dir=-1; sl_m=b_sl_atr; tp_m=b_tp_atr; }
             
             if (entry_dir != 0) {
                 int slot = (pos_type[0] == 0) ? 0 : 1;
@@ -220,11 +320,13 @@ __kernel void portfolio_kernel(
         }
     }
     
-    int res_offset = gid * 4;
-    results[res_offset + 0] = balance - initial_balance;  // Net profit
+    int res_offset = gid * 6; // Size 6
+    results[res_offset + 0] = balance - initial_balance;
     results[res_offset + 1] = (float)total_trades;
     results[res_offset + 2] = (float)total_wins;
     results[res_offset + 3] = max_dd;
+    results[res_offset + 4] = total_mfe;
+    results[res_offset + 5] = total_mae;
 }
 """
 
@@ -237,7 +339,9 @@ class CPUEngine:
         self.indicators = {
             'rsi': 50.0, 'rsi_gain': 0.0, 'rsi_loss': 0.0,
             'ema_fast': 0.0, 'ema_slow': 0.0,
-            'bb_buffer': [], 'bb_sum': 0.0
+            'bb_buffer': [], 'bb_sum': 0.0,
+            'tr_smooth': 0.0, 'dm_p_smooth': 0.0, 'dm_m_smooth': 0.0, 'adx': 0.0,
+            'atr': 0.0
         }
         print("⚡ CPU Engine Initialized")
 
@@ -252,27 +356,91 @@ class CPUEngine:
         """
         start = time.perf_counter()
         c = candle['close']
+        h = candle['high']
+        l = candle['low']
+        o = candle['open']
         
-        # --- SCALPER INDICATORS ---
-        p = int(self.params['scalper']['rsi_period'])
-        change = c - prev_candle['close']
+        prev_c = prev_candle['close']
+        prev_h = prev_candle['high']
+        prev_l = prev_candle['low']
+        
+        # --- UPDATE INDICATORS ---
+        
+        # 1. ATR (14)
+        tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+        alpha_atr = 1.0 / 14.0
+        self.indicators['atr'] = self.indicators['atr'] * (1 - alpha_atr) + tr * alpha_atr
+        atr_pips = self.indicators['atr'] * 10.0
+        
+        # 2. ADX (14)
+        dm_p = max(h - prev_h, 0) if (h - prev_h) > (prev_l - l) else 0
+        dm_m = max(prev_l - l, 0) if (prev_l - l) > (h - prev_h) else 0
+        
+        self.indicators['tr_smooth'] = self.indicators['tr_smooth'] * (1 - alpha_atr) + tr * alpha_atr
+        self.indicators['dm_p_smooth'] = self.indicators['dm_p_smooth'] * (1 - alpha_atr) + dm_p * alpha_atr
+        self.indicators['dm_m_smooth'] = self.indicators['dm_m_smooth'] * (1 - alpha_atr) + dm_m * alpha_atr
+        
+        di_p = (self.indicators['dm_p_smooth'] / self.indicators['tr_smooth']) * 100 if self.indicators['tr_smooth'] > 0 else 0
+        di_m = (self.indicators['dm_m_smooth'] / self.indicators['tr_smooth']) * 100 if self.indicators['tr_smooth'] > 0 else 0
+        dx = (abs(di_p - di_m) / (di_p + di_m)) * 100 if (di_p + di_m) > 0 else 0
+        self.indicators['adx'] = self.indicators['adx'] * (1 - alpha_atr) + dx * alpha_atr
+        
+        # 3. RSI (Scalper Period)
+        p_rsi = int(self.params['scalper']['rsi_period'])
+        change = c - prev_c
         gain = max(change, 0)
         loss = max(-change, 0)
-        
-        self.indicators['rsi_gain'] = (self.indicators['rsi_gain'] * (p - 1) + gain) / p
-        self.indicators['rsi_loss'] = (self.indicators['rsi_loss'] * (p - 1) + loss) / p
-        
+        self.indicators['rsi_gain'] = (self.indicators['rsi_gain'] * (p_rsi - 1) + gain) / p_rsi
+        self.indicators['rsi_loss'] = (self.indicators['rsi_loss'] * (p_rsi - 1) + loss) / p_rsi
         if self.indicators['rsi_loss'] == 0: rs = 100
         else: rs = self.indicators['rsi_gain'] / self.indicators['rsi_loss']
         self.indicators['rsi'] = 100 - (100 / (1 + rs))
         
+        # 4. Bollinger Bands (Breakout Period)
+        bb_p = int(self.params['breakout']['bb_period'])
+        self.indicators['bb_buffer'].append(c)
+        if len(self.indicators['bb_buffer']) > bb_p:
+            removed = self.indicators['bb_buffer'].pop(0)
+            self.indicators['bb_sum'] -= removed
+        self.indicators['bb_sum'] += c
+        
         # --- SIGNALS ---
         signal = None
-        if self.indicators['rsi'] < self.params['scalper']['os']:
-            signal = "BUY (Scalper)"
-        elif self.indicators['rsi'] > self.params['scalper']['ob']:
-            signal = "SELL (Scalper)"
+        
+        # Common Filters
+        current_hour = pd.Timestamp.now().hour # Approximate
+        body_size = abs(c - o)
+        total_size = h - l
+        body_pct = body_size / total_size if total_size > 0 else 0
+        
+        # SCALPER LOGIC
+        s = self.params['scalper']
+        s_time = (current_hour >= s['hour_start'] and current_hour <= s['hour_end'])
+        s_vol = (atr_pips >= s['atr_min'] and atr_pips <= s['atr_max'])
+        s_trend = (self.indicators['adx'] >= s['adx_min'])
+        s_body = (body_pct >= s['body_min'])
+        
+        if s_time and s_vol and s_trend and s_body:
+            if self.indicators['rsi'] < s['rsi_buy']:
+                signal = "BUY (Scalper)"
+            elif self.indicators['rsi'] > s['rsi_sell']:
+                signal = "SELL (Scalper)"
+        
+        # BREAKOUT LOGIC (Simplified for CPU speed)
+        if not signal and len(self.indicators['bb_buffer']) >= bb_p:
+            b = self.params['breakout']
+            sma = self.indicators['bb_sum'] / bb_p
+            std = np.std(self.indicators['bb_buffer'])
+            upper = sma + b['dev'] * std
+            lower = sma - b['dev'] * std
+            width = (upper - lower) * 10.0
             
+            if width >= b['min_w'] and width <= b['max_w']:
+                if c > upper and self.indicators['rsi'] > b['rsi_thresh']:
+                    signal = "BUY (Breakout)"
+                elif c < lower and self.indicators['rsi'] < (100 - b['rsi_thresh']):
+                    signal = "SELL (Breakout)"
+
         elapsed = (time.perf_counter() - start) * 1000
         return signal, elapsed, self.indicators['rsi']
 
@@ -335,147 +503,141 @@ class GPUEngine:
         print(f"🔧 GPU Engine: Phase set to {phase_names.get(phase, 'Unknown')}")
 
     def _generate_grid(self):
-        # FULL FACTORIAL GRID - Each strategy gets INDEPENDENT parameters
-        # Using Random Sampling to make it feasible
-        
+        # MEGA GRID - 500k combinations with expanded ranges
         import random
         random.seed(42)
         
-        # Define parameter ranges for EACH strategy
-        # Scalper ranges
-        s_rsi_period = [5, 7, 9, 10, 12, 14]
-        s_oversold = [20, 25, 30, 35, 40]
-        s_overbought = [60, 65, 70, 75, 80]
-        s_tp_atr = [1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
-        s_sl_atr = [1.0, 1.5, 2.0, 2.5, 3.0]
+        # --- SCALPER RANGES (15 params) ---
+        s_rsi_period = [3, 5, 7, 9, 12, 14, 17, 21]
+        s_rsi_buy    = [10, 15, 20, 25, 30, 35, 40, 45, 50]
+        s_rsi_sell   = [50, 55, 60, 65, 70, 75, 80, 85, 90]
+        s_atr_min    = [1, 3, 5, 10, 15, 20, 30, 40, 50]
+        s_atr_max    = [10, 50, 100, 150, 200, 300, 400, 500]
+        s_adx_min    = [0, 10, 15, 20, 25, 30, 40, 50]
+        s_hour_start = [0, 3, 6, 9]
+        s_hour_end   = [15, 18, 21, 23]
+        s_tp_atr     = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0]
+        s_sl_atr     = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
+        s_body_min   = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        # Unused params (padding to 15)
         
-        # Breakout ranges
-        b_bb_period = [10, 15, 20, 25, 30]
-        b_deviation = [1.5, 1.8, 2.0, 2.2, 2.5]
-        b_max_width = [200, 400, 600, 800, 1000]
-        b_tp_atr = [2.0, 4.0, 6.0, 8.0, 10.0]
-        b_sl_atr = [1.0, 1.5, 2.0, 2.5, 3.0]
+        # --- BREAKOUT RANGES (12 params) ---
+        b_bb_period  = [5, 10, 15, 20, 25, 30, 40, 50]
+        b_bb_dev     = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
+        b_min_width  = [5, 10, 20, 30, 50, 80, 100]
+        b_max_width  = [50, 100, 200, 300, 500, 800, 1000]
+        b_rsi_thresh = [40, 45, 50, 55, 60, 65, 70]
+        b_ema_period = [50, 100, 150, 200, 250, 300]
+        b_body_min   = [0.3, 0.5, 0.7]
+        b_atr_min    = [1, 5, 10, 20, 50]
+        b_tp_atr     = [1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0]
+        b_sl_atr     = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]
+        # Unused params (padding to 12)
+
+        # --- PULLBACK RANGES (13 params) ---
+        p_fast_ema   = [5, 10, 20, 30, 50, 80, 100]
+        p_slow_ema   = [50, 80, 100, 150, 200, 250, 300]
+        p_rsi_buy    = [20, 25, 30, 35, 40, 45, 50, 55, 60]
+        p_rsi_sell   = [40, 45, 50, 55, 60, 65, 70, 75, 80]
+        p_adx_min    = [10, 15, 20, 25, 30, 40, 50]
+        p_atr_min    = [1, 5, 10, 20, 30, 50]
+        p_tp_atr     = [1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 12.0]
+        p_sl_atr     = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
+        # Unused params (padding to 13)
         
-        # Pullback ranges
-        p_fast_ema = [20, 25, 30, 34, 40, 50]
-        p_slow_ema = [100, 120, 144, 180, 200]
-        p_rsi_trig = [30, 35, 40, 45, 50]
-        p_tp_atr = [2.0, 3.0, 4.0, 5.0, 6.0]
-        p_sl_atr = [1.0, 1.5, 2.0, 2.5, 3.0]
-        
-        # Generate random combinations where EACH strategy varies independently
-        num_samples = 100000  # 100k combinations for maximum coverage (with robust fitness anti-overfitting)
+        num_samples = 500000
         
         combos = []
         for _ in range(num_samples):
-            # Each combo has INDEPENDENT parameters for all 3 strategies
-            combo = [
-                # Scalper (5 params)
-                random.choice(s_rsi_period),
-                random.choice(s_oversold),
-                random.choice(s_overbought),
-                random.choice(s_tp_atr),
-                random.choice(s_sl_atr),
-                # Breakout (5 params)
-                random.choice(b_bb_period),
-                random.choice(b_deviation),
-                random.choice(b_max_width),
-                random.choice(b_tp_atr),
-                random.choice(b_sl_atr),
-                # Pullback (5 params)
-                random.choice(p_fast_ema),
-                random.choice(p_slow_ema),
-                random.choice(p_rsi_trig),
-                random.choice(p_tp_atr),
-                random.choice(p_sl_atr)
-            ]
+            combo = []
+            
+            # Scalper (15)
+            combo.extend([
+                random.choice(s_rsi_period), random.choice(s_rsi_buy), random.choice(s_rsi_sell),
+                random.choice(s_atr_min), random.choice(s_atr_max), random.choice(s_adx_min),
+                random.choice(s_hour_start), random.choice(s_hour_end),
+                random.choice(s_tp_atr), random.choice(s_sl_atr), random.choice(s_body_min),
+                0, 0, 0, 0 # Padding
+            ])
+            
+            # Breakout (12)
+            combo.extend([
+                random.choice(b_bb_period), random.choice(b_bb_dev),
+                random.choice(b_min_width), random.choice(b_max_width),
+                random.choice(b_rsi_thresh), random.choice(b_ema_period),
+                random.choice(b_body_min), random.choice(b_atr_min),
+                random.choice(b_tp_atr), random.choice(b_sl_atr),
+                0, 0 # Padding
+            ])
+            
+            # Pullback (13)
+            combo.extend([
+                random.choice(p_fast_ema), random.choice(p_slow_ema),
+                random.choice(p_rsi_buy), random.choice(p_rsi_sell),
+                random.choice(p_adx_min), random.choice(p_atr_min),
+                random.choice(p_tp_atr), random.choice(p_sl_atr),
+                0, 0, 0, 0, 0 # Padding
+            ])
+            
             combos.append(combo)
-        
-        print(f"🧠 Generated {len(combos)} INDEPENDENT combinations (Full Factorial Random Sampling)")
-        print(f"   Scalper: 6×5×5×6×5 = 4,500 possible configs")
-        print(f"   Breakout: 5×5×5×5×5 = 3,125 possible configs")
-        print(f"   Pullback: 6×5×5×5×5 = 3,750 possible configs")
-        print(f"   Total search space: ~53 BILLION combinations")
-        print(f"   Sampling: {len(combos)} random combinations from this space")
-        
+            
+        print(f"🧠 Generated {len(combos)} MEGA combinations (40 params each)")
         return np.array(combos, dtype=np.float32)
 
-    def calculate_robust_fitness(self, row):
-        """
-        ULTRA-ROBUST FITNESS FUNCTION
-        - Multiple anti-overfitting measures
-        - Penalizes statistical anomalies
-        - Rewards consistency over flash performance
-        """
+    def calculate_ultra_robust_fitness(self, row):
         net = row['NetProfit']
         trades = row['Trades']
         wins = row['Wins']
         dd = row['MaxDD']
+        mfe_total = row.get('TotalMFE', 0)
+        mae_total = row.get('TotalMAE', 0)
         
-        # === HARD FILTERS (Instant Rejection) ===
-        if dd >= 10.0:
-            return -999999  # Death condition
-        if trades < 20:
-            return -999999  # Too few trades = no statistical significance
-        if trades > 500:
-            return -999999  # Too many trades = overtrading (overfitting signal)
+        # === HARD FILTERS ===
+        dd_threshold = self.initial_balance * 0.25 # 25% training limit
+        if dd >= dd_threshold: return -999999
+        if trades < 10: return -999999
+        if trades > 1000: return -999999
         
-        # === CALCULATE METRICS ===
+        # === METRICS ===
         win_rate = wins / trades if trades > 0 else 0
         loss_count = trades - wins
-        avg_win = net / wins if wins > 0 else 0
-        avg_loss = abs(net) / loss_count if loss_count > 0 and net < 0 else 0.01
+        gross_profit = net if net > 0 else 0
+        gross_loss = abs(net) if net < 0 else 0.01
         
-        # Profit Factor
-        profit_factor = avg_win / avg_loss if avg_loss > 0 else 0
+        avg_win = gross_profit / wins if wins > 0 else 0
+        avg_loss = gross_loss / loss_count if loss_count > 0 else 0.01
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
         
-        # Sharpe-like Ratio (reward/risk)
-        sharpe = net / dd if dd > 0 else 0
+        avg_trade = net / trades if trades > 0 else 0
+        sharpe = avg_trade / max(dd, 1.0)
         
-        # === ANTI-OVERFITTING PENALTIES ===
+        # Sortino (Downside Risk)
+        downside_dev = avg_loss if loss_count > 0 else 1.0
+        sortino = avg_trade / max(downside_dev, 0.01)
         
-        # 1. Win Rate Penalty (too high = overfitting)
-        if win_rate > 0.75:
-            wr_penalty = 0.5  # 75%+ win rate is suspicious
-        elif win_rate < 0.40:
-            wr_penalty = 0.6  # Too low is bad
-        else:
-            wr_penalty = 1.0  # Sweet spot: 40-75%
+        # Efficiency
+        mfe_efficiency = net / max(mfe_total, 0.01) if mfe_total > 0 else 0
+        mae_efficiency = 1.0 - (abs(mae_total) / max(dd, 0.01))
         
-        # 2. Profit Factor Penalty (too high = curve fitting)
-        if profit_factor > 5.0:
-            pf_penalty = 0.4  # PF > 5 is unrealistic
-        elif profit_factor < 1.2:
-            pf_penalty = 0.7  # Too low edge
-        else:
-            pf_penalty = 1.0  # Realistic: 1.2-5.0
+        # === BONUSES ===
+        volume_bonus = 1.0
+        if 50 <= trades <= 200: volume_bonus = 2.0
+        elif 30 <= trades <= 300: volume_bonus = 1.5
+        elif 20 <= trades <= 400: volume_bonus = 1.3
         
-        # 3. Trade Count Penalty (prefer moderate activity)
-        if trades < 30:
-            tc_penalty = 0.7  # Low sample
-        elif trades > 300:
-            tc_penalty = 0.6  # Overtrading
-        elif 50 <= trades <= 150:
-            tc_penalty = 1.2  # BONUS for sweet spot
-        else:
-            tc_penalty = 1.0
+        daily_return_pct = (net / self.initial_balance) * 100
+        target_bonus = 1.0
+        if 10 <= daily_return_pct <= 20: target_bonus = 1.5
+        elif 5 <= daily_return_pct <= 25: target_bonus = 1.2
         
-        # 4. Drawdown Severity Penalty
-        dd_ratio = dd / 10.0  # Normalize to 0-1 (0 = no DD, 1 = death)
-        dd_penalty = 1.0 - (dd_ratio * 0.5)  # Max 50% penalty
+        # === PENALTIES ===
+        wr_penalty = 1.0
+        if win_rate > 0.80: wr_penalty = 0.3
+        elif win_rate < 0.35: wr_penalty = 0.6
         
-        # === COMPOSITE SCORE ===
-        # Base score components
-        profit_score = net * 2.0           # Weight: 2x
-        sharpe_score = sharpe * 50.0       # Weight: high (consistency)
-        wr_score = win_rate * 30.0         # Weight: moderate
-        pf_score = profit_factor * 10.0    # Weight: moderate
-        
-        # Raw score
-        raw_score = profit_score + sharpe_score + wr_score + pf_score
-        
-        # Apply penalties (multiplicative)
-        final_score = raw_score * wr_penalty * pf_penalty * tc_penalty * dd_penalty
+        # === SCORE ===
+        raw_score = (net * 3.0) + (sharpe * 100.0) + (sortino * 80.0) + (mfe_efficiency * 50.0) + (mae_efficiency * 30.0)
+        final_score = raw_score * volume_bonus * target_bonus * wr_penalty
         
         return final_score
 
@@ -505,8 +667,8 @@ class GPUEngine:
         print(f"   📊 Walk-Forward: Train={len(df_train)} candles | Test={len(df_test)} candles")
         
         # === PHASE 1: TRAIN (Find Best) ===
-        self.optimization_phase = 0  # Training: 15% DD threshold
-        print("   🧠 Phase 1: Training on historical data... (15% DD limit)")
+        self.optimization_phase = 0  # Training: 25% DD threshold
+        print("   🧠 Phase 1: Training on historical data... (25% DD limit)")
         best_params, best_score = self._run_optimization(df_train, phase="TRAIN")
         
         if best_score <= -999000:
@@ -516,8 +678,8 @@ class GPUEngine:
         print(f"   ✅ Training Best Score: {best_score:.2f}")
         
         # === PHASE 2: TEST (Validate) ===
-        self.optimization_phase = 1  # Validation: 20% DD threshold
-        print("   🔬 Phase 2: Validating on unseen data... (20% DD limit)")
+        self.optimization_phase = 1  # Validation: 30% DD threshold
+        print("   🔬 Phase 2: Validating on unseen data... (30% DD limit)")
         
         # Run ONLY the best params on test set
         test_result = self._test_single_params(df_test, best_params)
@@ -576,14 +738,15 @@ class GPUEngine:
                 b_hr = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=hr)
                 b_p = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=params)
                 
-                res = np.zeros(len(params) * 4, dtype=np.float32)
+                # Result size: 6 floats per combo
+                res = np.zeros(len(params) * 6, dtype=np.float32)
                 b_res = cl.Buffer(ctx, mf.WRITE_ONLY, res.nbytes)
                 
                 prg.portfolio_kernel(queue, (len(params),), None,
                     b_c, b_o, b_h, b_l, b_a, b_hr,
                     np.int32(len(c)), 
-                    np.float32(self.initial_balance),  # Working capital
-                    np.int32(self.optimization_phase),  # Phase (0/1/2)
+                    np.float32(self.initial_balance),
+                    np.int32(self.optimization_phase),
                     b_p, b_res)
                 queue.finish()
                 cl.enqueue_copy(queue, res, b_res)
@@ -633,22 +796,40 @@ class GPUEngine:
         combined_results = np.concatenate(all_results)
         
         # Process Results
-        r = combined_results.reshape(len(combined_params), 4)
-        df_res = pd.DataFrame(combined_params, columns=[f'P{k}' for k in range(15)])
+        r = combined_results.reshape(len(combined_params), 6)
+        df_res = pd.DataFrame(combined_params, columns=[f'P{k}' for k in range(40)])
         df_res['NetProfit'] = r[:, 0]
         df_res['Trades'] = r[:, 1]
         df_res['Wins'] = r[:, 2]
         df_res['MaxDD'] = r[:, 3]
+        df_res['TotalMFE'] = r[:, 4]
+        df_res['TotalMAE'] = r[:, 5]
         
-        df_res['Fitness'] = df_res.apply(self.calculate_robust_fitness, axis=1)
+        df_res['Fitness'] = df_res.apply(self.calculate_ultra_robust_fitness, axis=1)
         df_res.sort_values('Fitness', ascending=False, inplace=True)
         
         best = df_res.iloc[0]
         
         best_params = {
-            'scalper': {'rsi_period': best['P0'], 'os': best['P1'], 'ob': best['P2'], 'tp': best['P3'], 'sl': best['P4']},
-            'breakout': {'bb_period': best['P5'], 'dev': best['P6'], 'max_w': best['P7'], 'tp': best['P8'], 'sl': best['P9']},
-            'pullback': {'fast': best['P10'], 'slow': best['P11'], 'trig': best['P12'], 'tp': best['P13'], 'sl': best['P14']},
+            'scalper': {
+                'rsi_period': best['P0'], 'rsi_buy': best['P1'], 'rsi_sell': best['P2'],
+                'atr_min': best['P3'], 'atr_max': best['P4'], 'adx_min': best['P5'],
+                'hour_start': best['P6'], 'hour_end': best['P7'],
+                'tp': best['P8'], 'sl': best['P9'], 'body_min': best['P10']
+            },
+            'breakout': {
+                'bb_period': best['P15'], 'dev': best['P16'], 
+                'min_w': best['P17'], 'max_w': best['P18'],
+                'rsi_thresh': best['P19'], 'ema_period': best['P20'],
+                'body_min': best['P21'], 'atr_min': best['P22'],
+                'tp': best['P23'], 'sl': best['P24']
+            },
+            'pullback': {
+                'fast': best['P27'], 'slow': best['P28'],
+                'rsi_buy': best['P29'], 'rsi_sell': best['P30'],
+                'adx_min': best['P31'], 'atr_min': best['P32'],
+                'tp': best['P33'], 'sl': best['P34']
+            },
             'risk': 0.02,
             'score': best['Fitness'],
             'profit': best['NetProfit']
@@ -658,15 +839,32 @@ class GPUEngine:
     
     def _test_single_params(self, df, params):
         """Test a single parameter set on validation data"""
-        # Convert params dict to array format
-        param_array = np.array([
-            params['scalper']['rsi_period'], params['scalper']['os'], params['scalper']['ob'],
-            params['scalper']['tp'], params['scalper']['sl'],
-            params['breakout']['bb_period'], params['breakout']['dev'], params['breakout']['max_w'],
-            params['breakout']['tp'], params['breakout']['sl'],
-            params['pullback']['fast'], params['pullback']['slow'], params['pullback']['trig'],
-            params['pullback']['tp'], params['pullback']['sl']
-        ], dtype=np.float32).reshape(1, -1)
+        # Convert params dict to array format (40 floats)
+        p_arr = np.zeros(40, dtype=np.float32)
+        
+        # Scalper
+        s = params['scalper']
+        p_arr[0] = s['rsi_period']; p_arr[1] = s['rsi_buy']; p_arr[2] = s['rsi_sell']
+        p_arr[3] = s['atr_min']; p_arr[4] = s['atr_max']; p_arr[5] = s['adx_min']
+        p_arr[6] = s['hour_start']; p_arr[7] = s['hour_end']
+        p_arr[8] = s['tp']; p_arr[9] = s['sl']; p_arr[10] = s['body_min']
+        
+        # Breakout
+        b = params['breakout']
+        p_arr[15] = b['bb_period']; p_arr[16] = b['dev']
+        p_arr[17] = b['min_w']; p_arr[18] = b['max_w']
+        p_arr[19] = b['rsi_thresh']; p_arr[20] = b['ema_period']
+        p_arr[21] = b['body_min']; p_arr[22] = b['atr_min']
+        p_arr[23] = b['tp']; p_arr[24] = b['sl']
+        
+        # Pullback
+        p = params['pullback']
+        p_arr[27] = p['fast']; p_arr[28] = p['slow']
+        p_arr[29] = p['rsi_buy']; p_arr[30] = p['rsi_sell']
+        p_arr[31] = p['adx_min']; p_arr[32] = p['atr_min']
+        p_arr[33] = p['tp']; p_arr[34] = p['sl']
+        
+        param_array = p_arr.reshape(1, -1)
         
         # Run on GPU (use NVIDIA for speed)
         c = df['close'].values.astype(np.float32)
@@ -689,12 +887,15 @@ class GPUEngine:
         b_hr = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=hr)
         b_p = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=param_array)
         
-        res = np.zeros(4, dtype=np.float32)
+        res = np.zeros(6, dtype=np.float32)
         b_res = cl.Buffer(ctx, mf.WRITE_ONLY, res.nbytes)
         
         prg.portfolio_kernel(queue, (1,), None,
             b_c, b_o, b_h, b_l, b_a, b_hr,
-            np.int32(len(c)), b_p, b_res)
+            np.int32(len(c)), 
+            np.float32(self.initial_balance),
+            np.int32(self.optimization_phase),
+            b_p, b_res)
         queue.finish()
         cl.enqueue_copy(queue, res, b_res)
         
@@ -703,10 +904,12 @@ class GPUEngine:
             'NetProfit': [res[0]],
             'Trades': [res[1]],
             'Wins': [res[2]],
-            'MaxDD': [res[3]]
+            'MaxDD': [res[3]],
+            'TotalMFE': [res[4]],
+            'TotalMAE': [res[5]]
         })
         
-        fitness = self.calculate_robust_fitness(result_df.iloc[0])
+        fitness = self.calculate_ultra_robust_fitness(result_df.iloc[0])
         
         return {
             'fitness': fitness,
