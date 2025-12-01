@@ -1,3 +1,22 @@
+# TitanFusion-Antigravity Installer
+# Usage: irm https://raw.githubusercontent.com/LucassVal/TitanFusion-cBot/main/install.ps1 | iex
+
+Write-Host "🚀 Installing TitanFusion-Antigravity (Python Edition)..." -ForegroundColor Cyan
+
+# Check Python
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Error "Python not found! Please install Python 3.10+"
+    exit 1
+}
+
+$repo = "LucassVal/TitanFusion-cBot"
+$installDir = "$HOME\TitanFusion-Antigravity"
+$branch = "main"
+
+# Check if already installed
+if (Test-Path $installDir) {
+    Write-Host "⚠️  TitanFusion-Antigravity already installed at: $installDir" -ForegroundColor Yellow
+    $update = Read-Host "Update to latest version? (y/n)"
     
     if ($update -ne 'y') {
         Write-Host "Installation cancelled." -ForegroundColor Red
@@ -5,7 +24,7 @@
     }
     
     Write-Host "🔄 Updating..." -ForegroundColor Green
-    Remove-Item -Recurse -Force $installPath
+    Remove-Item -Recurse -Force $installDir
 }
 
 # Create directory
@@ -20,7 +39,8 @@ $zipPath = "$env:TEMP\TitanPro.zip"
 try {
     Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
     Write-Host "✅ Download complete!" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "❌ Download failed: $_" -ForegroundColor Red
     exit 1
 }
