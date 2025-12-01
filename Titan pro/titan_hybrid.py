@@ -702,22 +702,6 @@ class HybridTrader:
         
         from data_manager import DataManager
         manager = DataManager()
-        
-        # Get data (auto-updates if >7 days old)
-        df_m1 = manager.get_data(source=DATA_SOURCE, symbol=SELECTED_SYMBOL, auto_update=True)
-        
-        if df_m1 is None or df_m1.empty:
-            print("❌ Failed to load data!")
-            return
-        
-        # Aggregate to selected timeframe
-        print(f"🔄 Aggregating M1 → {SELECTED_TIMEFRAME}...")
-        
-        df_m1.set_index('time', inplace=True)
-        
-        df_tf = df_m1.resample(SELECTED_TIMEFRAME).agg({
-            'open': 'first',
-            'high': 'max',
             'low': 'min',
             'close': 'last'
         }).dropna().reset_index()
@@ -798,23 +782,6 @@ class HybridTrader:
                     print("   [System Updated with New Parameters]\n")
                 
             except queue.Empty:
-                continue
-            except Exception as e:
-                print(f"GPU Error: {e}")
-
-# =============================================================================
-# LIVE TRADING LOOP (Deriv API)
-# =============================================================================
-def run_live_trading():
-    from deriv_client import DerivClient
-    
-    print("="*50)
-    print("TITAN PRO - LIVE HYBRID TRADING (DERIV API)")
-    print("="*50)
-    print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
-    
-    # Use working capital from launcher
-    working_capital = WORKING_CAPITAL
     print(f"💰 Working Capital: ${working_capital:.2f}")
     print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
     print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
