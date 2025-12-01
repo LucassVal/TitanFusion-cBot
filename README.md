@@ -54,19 +54,19 @@ python launcher.py
 ### 🛡️ Tiered Drawdown Protection
 | Phase | DD Limit | Purpose |
 |-------|----------|---------|
-| Training | 15% | Find conservative parameters |
-| Validation | 20% | Test robustness |
+| Training | 25% | Allow aggressive discovery |
+| Validation | 30% | Stress-test robustness |
 | Live Trading | 12% | Maximum capital protection |
 
-### 🧠 Dual GPU Optimization
-- **100,000 Parameter Combinations** tested in parallel
-- **Intel + NVIDIA GPUs** working simultaneously
-- **Walk-Forward Validation** (70/30 train/test split)
-- **Anti-Overfitting Measures** built into fitness function
+### 🧠 Full Revolution GPU Engine (v2.1)
+- **500,000 Parameter Combinations** tested per cycle
+- **40 Parameters per Strategy** (vs 15 previously)
+- **New Indicators**: ADX, MFE, MAE, Sortino Ratio
+- **Ultra-Robust Fitness**: Rewards volume (50-200 trades) and consistency
 
 ### 📈 5% Daily Profit Target
 - Optimized fitness function rewards 4-6% daily returns
-- Realistic compounding expectations
+- **Volume Bonus**: Targets active trading frequency
 - Conservative risk per trade (2-4%)
 
 ### 🔄 Auto-Reconnection

@@ -17,7 +17,7 @@
 
 ## 1. Algorithm Deep Dive
 
-### 1.1 Core Trading Loop (OpenCL Kernel)
+### 1.1 Core Trading Loop (OpenCL Kernel v2.1)
 
 The system runs a **portfolio simulation** for each parameter combination:
 
@@ -27,27 +27,43 @@ for each candle (i = 1 to num_candles):
        - RSI (multiple periods)
        - Bollinger Bands
        - EMAs (Fast + Slow)
+       - ADX (Trend Strength)
+       - ATR (Volatility)
     
     2. Check Exits (Existing Positions):
        - Hit Stop Loss? → Close with loss
        - Hit Take Profit? → Close with profit
        - Update Balance, Drawdown, Win Count
+       - Track MFE (Max Favorable Excursion) and MAE (Max Adverse Excursion)
     
     3. Check Drawdown:
        - If DD >= Threshold → KILL this parameter combo
-       - Threshold varies by phase (15%/20%/12%)
+       - Threshold varies by phase (25%/30%/12%)
     
     4. Check Entries (If slots available):
-       - Evaluate Scalper signals
-       - Evaluate Pullback signals
-       - Evaluate Breakout signals
+       - Evaluate Scalper signals (RSI + ADX + ATR)
+       - Evaluate Pullback signals (EMA + RSI + ADX)
+       - Evaluate Breakout signals (BB + RSI + EMA)
        - Take FIRST valid signal (priority order)
     
     5. Record Results:
        - Net Profit, Total Trades, Wins, Max DD
+       - Total MFE, Total MAE (for efficiency scoring)
 ```
 
 ### 1.2 Indicator Calculations
+
+#### ADX (Average Directional Index)
+Added in v2.1 to filter weak trends.
+```c
+TR = max(high-low, abs(high-prev_close), abs(low-prev_close))
++DM = (high - prev_high) > (prev_low - low) ? max(high - prev_high, 0) : 0
+-DM = (prev_low - low) > (high - prev_high) ? max(prev_low - low, 0) : 0
+
+Smoothed TR, +DM, -DM (Wilder's Smoothing)
+DX = (|+DI - -DI| / (+DI + -DI)) * 100
+ADX = Smoothed DX
+```
 
 #### RSI (Relative Strength Index)
 ```c
@@ -59,41 +75,6 @@ RS = avg_gain / avg_loss
 RSI = 100 - (100 / (1 + RS))
 ```
 
-**Scalper**: Uses custom RSI period (5-14)  
-**Breakout**: Uses fixed RSI(14) for momentum  
-**Pullback**: Uses fixed RSI(14) for retracement
-
-#### Bollinger Bands
-```c
-Middle Band = SMA(close, period)
-Standard Deviation = sqrt(sum((close - SMA)²) / period)
-Upper Band = SMA + (deviation × std)
-Lower Band = SMA - (deviation × std)
-Band Width = (Upper - Lower) × 10  // In pips
-```
-
-**Used by Breakout strategy** to detect squeeze.
-
-#### EMA (Exponential Moving Average)
-```c
-multiplier = 2 / (period + 1)
-EMA = (close × multiplier) + (prev_EMA × (1 - multiplier))
-```
-
-**Breakout**: EMA(100) for trend filter  
-**Pullback**: Fast EMA (20-50) + Slow EMA (100-200)
-
-#### ATR (Average True Range)
-```c
-True Range = max(high - low, abs(high - prev_close), abs(low - prev_close))
-ATR = Exponential average of True Range over 14 periods
-```
-
-**Used by ALL strategies** for:
-- Stop Loss placement
-- Take Profit placement
-- Volatility filtering
-
 ---
 
 ## 2. Trading Strategies Explained
@@ -104,47 +85,23 @@ ATR = Exponential average of True Range over 14 periods
 ```plaintext
 Conditions (ALL must be true):
 ├─ RSI Crossover
-│  ├─ Previous RSI <= Oversold Threshold (e.g., 30)
-│  └─ Current RSI > Oversold Threshold
+│  └─ RSI < RSI_Buy_Threshold (Dynamic: 10-50)
+├─ Trend Filter (ADX)
+│  └─ ADX > ADX_Min (Dynamic: 0-50)
 ├─ Time Filter
-│  └─ Hour >= 7 AND Hour < 20 (UTC)
+│  └─ Hour >= Start_Hour AND Hour <= End_Hour
 ├─ Volatility Filter
-│  ├─ ATR >= 2.5 pips
-│  └─ ATR <= 500 pips
-└─ Position Limit
-   └─ Active Positions < 2
+│  ├─ ATR >= ATR_Min
+│  └─ ATR <= ATR_Max
+└─ Candle Body Filter
+   └─ Body % >= Body_Min (Avoid Dojis)
 ```
 
-**Optimized Parameters**:
-- `s_p1`: RSI Period (5-14)
-- `s_p2`: Oversold Level (20-40)
-- `s_p3`: Overbought Level (60-80)
-- `s_p4`: TP ATR Multiplier (1.5-5.0)
-- `s_p5`: SL ATR Multiplier (1.0-3.0)
-
-#### Exit Logic
-```plaintext
-Take Profit:
-├─ For BUY: Price >= Entry + (ATR × TP_Mult × 0.10)
-└─ For SELL: Price <= Entry - (ATR × TP_Mult × 0.10)
-
-Stop Loss:
-├─ For BUY: Price <= Entry - (ATR × SL_Mult × 0.10)
-└─ For SELL: Price >= Entry + (ATR × SL_Mult × 0.10)
-```
-
-#### When It Works Best
-✅ **Ideal Conditions**:
-- Range-bound markets
-- High volatility synthetic indices (R_75, R_100)
-- Oscillating price action
-
-❌ **Poor Conditions**:
-- Strong trends (gets whipsawed)
-- Low volatility (too few signals)
-- News events (extreme spikes)
-
----
+**Optimized Parameters (15 Total)**:
+- `rsi_period`, `rsi_buy`, `rsi_sell`
+- `atr_min`, `atr_max`, `adx_min`
+- `hour_start`, `hour_end`
+- `tp`, `sl`, `body_min`
 
 ### 2.2 BREAKOUT (Bollinger Squeeze + Momentum)
 
@@ -152,56 +109,22 @@ Stop Loss:
 ```plaintext
 Conditions (ALL must be true):
 ├─ Bollinger Squeeze
-│  ├─ Band Width = (Upper BB - Lower BB) × 10
-│  └─ Width <= Max Width Threshold (e.g., 500 pips)
+│  └─ Band Width <= Max_Width
 ├─ Strong Bullish Candle
-│  ├─ Close > Upper Bollinger Band
-│  ├─ Candle Body >= 50% of Total Range
-│  └─ Close > Open (bullish candle)
+│  ├─ Close > Upper BB
+│  └─ Body % >= Body_Min
 ├─ Momentum Confirmation
-│  ├─ RSI(14) > 55
-│  └─ Close > EMA(100)
-├─ Time Filter (same as Scalper)
-└─ Volatility Filter (same as Scalper)
+│  ├─ RSI > RSI_Threshold
+│  └─ Close > EMA(Period)
+└─ Volatility Filter
+   └─ ATR >= ATR_Min
 ```
 
-**Code Snippet (from kernel)**:
-```c
-float sma = bb_sum / bb_period;
-float std = sqrt(variance);
-float upper = sma + (deviation × std);
-float lower = sma - (deviation × std);
-float width = (upper - lower) × 10.0f;
-
-if (width <= max_width) {  // Squeeze detected
-    float body = abs(close - open);
-    float total = high - low;
-    
-    if (body/total >= 0.5f) {  // Strong candle
-        if (close > upper && rsi > 55 && close > ema) {
-            // BUY signal confirmed
-        }
-    }
-}
-```
-
-#### Exit Logic
-Same as Scalper, but:
-- **Wider TP**: Default 5.0× ATR (vs 3.0× for Scalper)
-- **Same SL**: 2.0× ATR
-
-#### When It Works Best
-✅ **Ideal Conditions**:
-- Consolidation followed by breakout
-- News events / economic calendar
-- Strong momentum
-
-❌ **Poor Conditions**:
-- Ranging markets (false breakouts)
-- Low volume periods
-- Choppy price action
-
----
+**Optimized Parameters (12 Total)**:
+- `bb_period`, `dev`, `min_w`, `max_w`
+- `rsi_thresh`, `ema_period`
+- `body_min`, `atr_min`
+- `tp`, `sl`
 
 ### 2.3 PULLBACK (EMA Trend Following)
 
@@ -209,109 +132,96 @@ Same as Scalper, but:
 ```plaintext
 Conditions (ALL must be true):
 ├─ Trend Confirmation
-│  └─ Fast EMA (e.g., 34) > Slow EMA (e.g., 144)
+│  └─ Fast EMA > Slow EMA
 ├─ Pullback Detection
-│  └─ RSI(14) < RSI Trigger (e.g., 40)
-├─ Time Filter (same as others)
-└─ Volatility Filter (same as others)
+│  └─ RSI < RSI_Buy_Threshold
+├─ Trend Strength
+│  └─ ADX > ADX_Min
+└─ Volatility Filter
+   └─ ATR >= ATR_Min
 ```
 
-**Why This Works**:
-- Trend provides directional bias
-- RSI pullback = temporary retracement
-- Entry on "dip" in uptrend = better risk/reward
-
-#### Exit Logic
-Same as Scalper, but:
-- **Moderate TP**: Default 4.0× ATR
-- **Same SL**: 2.0× ATR
-
-#### When It Works Best
-✅ **Ideal Conditions**:
-- Strong trending markets
-- Forex pairs with clear directionality
-- Post-breakout continuation
-
-❌ **Poor Conditions**:
-- Sideways/ranging markets
-- Trend reversals
-- Choppy EMAs (many crossovers)
+**Optimized Parameters (13 Total)**:
+- `fast_ema`, `slow_ema`
+- `rsi_buy`, `rsi_sell`
+- `adx_min`, `atr_min`
+- `tp`, `sl`
 
 ---
 
-## 3. GPU Optimization Engine
+## 3. GPU Optimization Engine (Full Revolution v2.1)
 
 ### 3.1 Walk-Forward Validation
 
 ```
-Historical Data (3 months = ~6048 M15 candles)
+Historical Data (3 months = ~8640 M15 candles)
 ├─ Split 70/30
-│  ├─ Training Set (70% = ~4234 candles)
-│  └─ Test Set (30% = ~1814 candles)
+│  ├─ Training Set (70%)
+│  └─ Test Set (30%)
 │
-Phase 1: TRAINING (15% DD Limit)
-├─ Test 100,000 parameter combinations
+Phase 1: TRAINING (25% DD Limit)
+├─ Test 500,000 parameter combinations (Mega Grid)
 ├─ Each combo runs full simulation on training data
-├─ Reject if DD >= 15% or other fitness criteria
-├─ Select BEST combo by fitness score
+├─ Reject if DD >= 25% or other fitness criteria
+├─ Select BEST combo by Ultra-Robust Fitness score
 │
-Phase 2: VALIDATION (20% DD Limit)
+Phase 2: VALIDATION (30% DD Limit)
 ├─ Test ONLY the best combo on test data (unseen)
-├─ Reject if DD >= 20%
-├─ If passes → Use for live trading
+├─ Reject if DD >= 30%
+├─ If passes → Use for live trading (12% DD limit)
 └─ If fails → Return to defaults (manual review needed)
 ```
 
-### 3.2 Fitness Function
+### 3.2 Ultra-Robust Fitness Function
 
-**Purpose**: Prevent overfitting, reward consistency.
+**Purpose**: Prevent overfitting, reward consistency and optimal volume.
 
 ```python
 Hard Filters (Instant Rejection):
-├─ Drawdown >= 10.0 → Score = -999999
-├─ Trades < 20 → Score = -999999 (no statistical significance)
-└─ Trades > 500 → Score = -999999 (overtrading/overfitting)
+├─ Drawdown >= 25% (Training)
+├─ Trades < 10 (No statistical significance)
+└─ Trades > 1000 (Overtrading/Scalping noise)
 
 Soft Metrics:
-├─ Net Profit × 3.0 (weight: highest)
-├─ Sharpe Ratio × 50.0 (profit / drawdown consistency)
-├─ Win Rate × 30.0 (prefer 50-65%)
-└─ Profit Factor × 10.0 (gross profit / gross loss)
+├─ Net Profit × 3.0
+├─ Sharpe Ratio × 100.0 (Reward consistency)
+├─ Sortino Ratio × 80.0 (Penalize downside volatility)
+├─ MFE Efficiency × 50.0 (Reward perfect entries)
+└─ MAE Efficiency × 30.0 (Reward tight stops)
+
+Bonuses:
+├─ Volume Bonus: 50-200 trades → ×2.0 Score (Sweet spot)
+└─ Target Bonus: 5-25% Daily Return → ×1.2 Score
 
 Penalties:
-├─ Win Rate > 75% → ×0.5 (too good = overfitting)
-├─ Win Rate < 40% → ×0.6 (too poor)
-├─ Profit Factor > 5.0 → ×0.4 (unrealistic)
-└─ Profit Factor < 1.2 → ×0.7 (unprofitable)
-
-Bonus:
-├─ Daily Return 4-6% → ×1.5 (aligned with 5% goal)
-└─ Daily Return 3-7% → ×1.2
+├─ Win Rate > 80% → ×0.3 (Suspicious/Overfitting)
+└─ Win Rate < 35% → ×0.6 (Too poor)
 ```
 
-### 3.3 Parameter Search Space
+### 3.3 Parameter Search Space (40 Parameters)
 
-**Total Combinations**: ~53 BILLION
+**Total Combinations**: ~10^25 (Effectively Infinite)
 
-| Strategy | Parameter | Range | Options | Combinations |
-|----------|-----------|-------|---------|--------------|
-| **Scalper** | RSI Period | 5-14 | 6 | |
-| | Oversold | 20-40 | 5 | |
-| | Overbought | 60-80 | 5 | |
-| | TP Mult | 1.5-5.0 | 6 | |
-| | SL Mult | 1.0-3.0 | 5 | **4,500** |
-| **Breakout** | BB Period | 10-30 | 5 | |
-| | BB Dev | 1.5-2.5 | 5 | |
-| | Max Width | 200-1000 | 5 | |
-| | TP Mult | 2.0-10.0 | 5 | |
-| | SL Mult | 1.0-3.0 | 5 | **3,125** |
-| **Pullback** | Fast EMA | 20-50 | 6 | |
-| | Slow EMA | 100-200 | 5 | |
-| | RSI Trigger | 30-50 | 5 | |
-| | TP Mult | 2.0-6.0 | 5 | |
-| | SL Mult | 1.0-3.0 | 5 | **3,750** |
+| Strategy | Parameter | Range | Options |
+|----------|-----------|-------|---------|
+| **Scalper** | RSI Period | 3-21 | 8 |
+| (15 Params) | RSI Buy/Sell | 10-50 / 50-90 | 9 x 9 |
+| | ATR Min/Max | 1-50 / 10-500 | 9 x 8 |
+| | ADX Min | 0-50 | 8 |
+| | Hour Start/End | 0-9 / 15-23 | 4 x 4 |
+| | TP/SL ATR | 0.5-10.0 | 10 x 8 |
+| | Body Min | 0.3-0.9 | 7 |
+| **Breakout** | BB Period/Dev | 5-50 / 0.5-3.5 | 8 x 7 |
+| (12 Params) | Min/Max Width | 5-100 / 50-1000 | 7 x 7 |
+| | RSI/EMA | 40-70 / 50-300 | 7 x 6 |
+| | Body/ATR Min | 0.3-0.7 / 1-50 | 3 x 5 |
+| | TP/SL ATR | 1.0-15.0 | 7 x 6 |
+| **Pullback** | Fast/Slow EMA | 5-100 / 50-300 | 7 x 7 |
+| (13 Params) | RSI Buy/Sell | 20-60 / 40-80 | 9 x 9 |
+| | ADX/ATR Min | 10-50 / 1-50 | 7 x 6 |
+| | TP/SL ATR | 1.0-12.0 | 7 x 7 |
 
-**Sampling Strategy**: Random sampling of 100,000 combinations to make computation feasible (~2-3 minutes).
+**Sampling Strategy**: Random sampling of **500,000 combinations** per optimization cycle. This provides a dense coverage of the most likely profitable areas of the search space.
 
 ---
 
