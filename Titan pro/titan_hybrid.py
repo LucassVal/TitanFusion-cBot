@@ -502,86 +502,123 @@ class GPUEngine:
         phase_names = {0: "Training (15% DD)", 1: "Validation (20% DD)", 2: "Live Trading (12% DD)"}
         print(f"🔧 GPU Engine: Phase set to {phase_names.get(phase, 'Unknown')}")
 
-    def _generate_grid(self):
-        # MEGA GRID - 500k combinations with expanded ranges
+    def _generate_grid(self, center_params=None):
+        # MEGA GRID - 500k combinations
+        # If center_params is provided, generates grid around it (Refinement)
+        # If None, generates Global Grid with WIDE ranges (1-150+)
         import random
         random.seed(42)
         
-        # --- SCALPER RANGES (15 params) ---
-        s_rsi_period = [3, 5, 7, 9, 12, 14, 17, 21]
-        s_rsi_buy    = [10, 15, 20, 25, 30, 35, 40, 45, 50]
-        s_rsi_sell   = [50, 55, 60, 65, 70, 75, 80, 85, 90]
-        s_atr_min    = [1, 3, 5, 10, 15, 20, 30, 40, 50]
-        s_atr_max    = [10, 50, 100, 150, 200, 300, 400, 500]
-        s_adx_min    = [0, 10, 15, 20, 25, 30, 40, 50]
-        s_hour_start = [0, 3, 6, 9]
-        s_hour_end   = [15, 18, 21, 23]
-        s_tp_atr     = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0]
-        s_sl_atr     = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
-        s_body_min   = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        # Unused params (padding to 15)
-        
-        # --- BREAKOUT RANGES (12 params) ---
-        b_bb_period  = [5, 10, 15, 20, 25, 30, 40, 50]
-        b_bb_dev     = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
-        b_min_width  = [5, 10, 20, 30, 50, 80, 100]
-        b_max_width  = [50, 100, 200, 300, 500, 800, 1000]
-        b_rsi_thresh = [40, 45, 50, 55, 60, 65, 70]
-        b_ema_period = [50, 100, 150, 200, 250, 300]
-        b_body_min   = [0.3, 0.5, 0.7]
-        b_atr_min    = [1, 5, 10, 20, 50]
-        b_tp_atr     = [1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0]
-        b_sl_atr     = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]
-        # Unused params (padding to 12)
-
-        # --- PULLBACK RANGES (13 params) ---
-        p_fast_ema   = [5, 10, 20, 30, 50, 80, 100]
-        p_slow_ema   = [50, 80, 100, 150, 200, 250, 300]
-        p_rsi_buy    = [20, 25, 30, 35, 40, 45, 50, 55, 60]
-        p_rsi_sell   = [40, 45, 50, 55, 60, 65, 70, 75, 80]
-        p_adx_min    = [10, 15, 20, 25, 30, 40, 50]
-        p_atr_min    = [1, 5, 10, 20, 30, 50]
-        p_tp_atr     = [1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 12.0]
-        p_sl_atr     = [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
-        # Unused params (padding to 13)
-        
+        combos = []
         num_samples = 500000
         
-        combos = []
-        for _ in range(num_samples):
-            combo = []
+        if center_params is None:
+            # === GLOBAL SEARCH (WIDE RANGES) ===
+            print("   🌍 Generating Global Grid (Wide Ranges 1-150+)...")
             
             # Scalper (15)
-            combo.extend([
-                random.choice(s_rsi_period), random.choice(s_rsi_buy), random.choice(s_rsi_sell),
-                random.choice(s_atr_min), random.choice(s_atr_max), random.choice(s_adx_min),
-                random.choice(s_hour_start), random.choice(s_hour_end),
-                random.choice(s_tp_atr), random.choice(s_sl_atr), random.choice(s_body_min),
-                0, 0, 0, 0 # Padding
-            ])
+            s_rsi_period = list(range(3, 150, 2))
+            s_rsi_buy    = list(range(5, 55, 5))
+            s_rsi_sell   = list(range(45, 95, 5))
+            s_atr_min    = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50]
+            s_atr_max    = [50, 100, 200, 300, 500, 800, 1000]
+            s_adx_min    = [0, 10, 15, 20, 25, 30, 40]
+            s_hour_start = [0, 2, 4, 6, 8, 10]
+            s_hour_end   = [14, 16, 18, 20, 22]
+            s_tp_atr     = [1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0, 15.0]
+            s_sl_atr     = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]
+            s_body_min   = [0.3, 0.5, 0.7, 0.9]
             
             # Breakout (12)
-            combo.extend([
-                random.choice(b_bb_period), random.choice(b_bb_dev),
-                random.choice(b_min_width), random.choice(b_max_width),
-                random.choice(b_rsi_thresh), random.choice(b_ema_period),
-                random.choice(b_body_min), random.choice(b_atr_min),
-                random.choice(b_tp_atr), random.choice(b_sl_atr),
-                0, 0 # Padding
-            ])
+            b_bb_period  = list(range(10, 150, 5))
+            b_bb_dev     = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
+            b_min_width  = [5, 10, 20, 50, 100]
+            b_max_width  = [100, 200, 500, 800, 1000, 1500]
+            b_rsi_thresh = [40, 45, 50, 55, 60, 65, 70]
+            b_ema_period = list(range(20, 300, 10))
+            b_body_min   = [0.3, 0.5, 0.7]
+            b_atr_min    = [1, 5, 10, 20, 50]
+            b_tp_atr     = [2.0, 4.0, 6.0, 8.0, 10.0, 15.0, 20.0]
+            b_sl_atr     = [1.0, 2.0, 3.0, 5.0]
             
             # Pullback (13)
-            combo.extend([
-                random.choice(p_fast_ema), random.choice(p_slow_ema),
-                random.choice(p_rsi_buy), random.choice(p_rsi_sell),
-                random.choice(p_adx_min), random.choice(p_atr_min),
-                random.choice(p_tp_atr), random.choice(p_sl_atr),
-                0, 0, 0, 0, 0 # Padding
-            ])
+            p_fast_ema   = list(range(5, 100, 5))
+            p_slow_ema   = list(range(50, 300, 10))
+            p_rsi_buy    = list(range(20, 60, 5))
+            p_rsi_sell   = list(range(40, 80, 5))
+            p_adx_min    = [10, 20, 30, 40, 50]
+            p_atr_min    = [1, 5, 10, 20, 50]
+            p_tp_atr     = [2.0, 4.0, 6.0, 8.0, 10.0, 15.0]
+            p_sl_atr     = [1.0, 2.0, 3.0, 5.0]
+
+            for _ in range(num_samples):
+                combo = []
+                # Scalper
+                combo.extend([
+                    random.choice(s_rsi_period), random.choice(s_rsi_buy), random.choice(s_rsi_sell),
+                    random.choice(s_atr_min), random.choice(s_atr_max), random.choice(s_adx_min),
+                    random.choice(s_hour_start), random.choice(s_hour_end),
+                    random.choice(s_tp_atr), random.choice(s_sl_atr), random.choice(s_body_min),
+                    0, 0, 0, 0
+                ])
+                # Breakout
+                combo.extend([
+                    random.choice(b_bb_period), random.choice(b_bb_dev),
+                    random.choice(b_min_width), random.choice(b_max_width),
+                    random.choice(b_rsi_thresh), random.choice(b_ema_period),
+                    random.choice(b_body_min), random.choice(b_atr_min),
+                    random.choice(b_tp_atr), random.choice(b_sl_atr),
+                    0, 0
+                ])
+                # Pullback
+                combo.extend([
+                    random.choice(p_fast_ema), random.choice(p_slow_ema),
+                    random.choice(p_rsi_buy), random.choice(p_rsi_sell),
+                    random.choice(p_adx_min), random.choice(p_atr_min),
+                    random.choice(p_tp_atr), random.choice(p_sl_atr),
+                    0, 0, 0, 0, 0
+                ])
+                combos.append(combo)
+                
+        else:
+            # === REFINEMENT SEARCH (LOCAL GRID) ===
+            print("   🎯 Generating Refinement Grid (Focused around best)...")
+            c = center_params # Array of 40 floats
             
-            combos.append(combo)
+            # Helper to create range around value
+            def get_range(val, step, count=5):
+                return [val + (i - count//2)*step for i in range(count) if val + (i - count//2)*step > 0]
             
-        print(f"🧠 Generated {len(combos)} MEGA combinations (40 params each)")
+            for _ in range(num_samples):
+                combo = []
+                # Scalper (Indices 0-10)
+                combo.extend([
+                    random.choice(get_range(c[0], 2)), random.choice(get_range(c[1], 2)), random.choice(get_range(c[2], 2)),
+                    random.choice(get_range(c[3], 2)), random.choice(get_range(c[4], 10)), random.choice(get_range(c[5], 5)),
+                    random.choice(get_range(c[6], 1)), random.choice(get_range(c[7], 1)),
+                    random.choice(get_range(c[8], 0.5)), random.choice(get_range(c[9], 0.5)), random.choice(get_range(c[10], 0.1)),
+                    0, 0, 0, 0
+                ])
+                # Breakout (Indices 15-24)
+                combo.extend([
+                    random.choice(get_range(c[15], 2)), random.choice(get_range(c[16], 0.1)),
+                    random.choice(get_range(c[17], 5)), random.choice(get_range(c[18], 50)),
+                    random.choice(get_range(c[19], 2)), random.choice(get_range(c[20], 10)),
+                    random.choice(get_range(c[21], 0.1)), random.choice(get_range(c[22], 2)),
+                    random.choice(get_range(c[23], 1.0)), random.choice(get_range(c[24], 0.5)),
+                    0, 0
+                ])
+                # Pullback (Indices 27-34)
+                combo.extend([
+                    random.choice(get_range(c[27], 5)), random.choice(get_range(c[28], 10)),
+                    random.choice(get_range(c[29], 2)), random.choice(get_range(c[30], 2)),
+                    random.choice(get_range(c[31], 5)), random.choice(get_range(c[32], 2)),
+                    random.choice(get_range(c[33], 1.0)), random.choice(get_range(c[34], 0.5)),
+                    0, 0, 0, 0, 0
+                ])
+                combos.append(combo)
+
+        print(f"🧠 Generated {len(combos)} combinations")
         return np.array(combos, dtype=np.float32)
 
     def calculate_ultra_robust_fitness(self, row):
@@ -643,11 +680,10 @@ class GPUEngine:
 
     def optimize(self, history_candles):
         """
-        WALK-FORWARD OPTIMIZATION WITH VALIDATION
-        - Split data: 70% train, 30% test
-        - Find TOP 10 candidates on train set
-        - Validate all 10 on test set (unseen data)
-        - Select best passing candidate
+        COARSE-TO-FINE OPTIMIZATION (2-STAGE)
+        Stage 1: Global Search (Wide Ranges) -> Find rough best area
+        Stage 2: Refinement (Local Grid) -> Optimize around best area
+        Stage 3: Validation -> Test top candidates on unseen data
         """
         if not self.intel_ctx and not self.nvidia_ctx: 
             return DEFAULT_PARAMS
@@ -666,45 +702,56 @@ class GPUEngine:
         
         print(f"   📊 Walk-Forward: Train={len(df_train)} candles | Test={len(df_test)} candles")
         
-        # === PHASE 1: TRAIN (Find Top Candidates) ===
-        self.optimization_phase = 0  # Training: 25% DD threshold
-        print("   🧠 Phase 1: Training on historical data... (25% DD limit)")
+        # === STAGE 1: GLOBAL SEARCH (Wide Ranges) ===
+        self.optimization_phase = 0
+        print("   🌍 Stage 1: Global Search (Wide Ranges)...")
         
-        # Get TOP 10 candidates instead of just 1
-        top_candidates = self._run_optimization(df_train, phase="TRAIN", top_n=10)
+        # Generate Global Grid
+        self.grid_params = self._generate_grid(center_params=None)
         
-        if not top_candidates:
-            print("   ⚠️ No valid parameters found in training!")
+        # Find Single Best from Global
+        global_candidates = self._run_optimization(df_train, phase="TRAIN", top_n=1)
+        
+        if not global_candidates:
+            print("   ⚠️ No valid parameters found in Global Search!")
             return DEFAULT_PARAMS
+            
+        best_global = global_candidates[0]
+        print(f"   ✅ Global Best Score: {best_global['score']:.2f}")
         
-        print(f"   ✅ Found {len(top_candidates)} candidates. Best Score: {top_candidates[0]['score']:.2f}")
+        # === STAGE 2: REFINEMENT (Local Search) ===
+        print("   🎯 Stage 2: Refinement (Local Search)...")
         
-        # === PHASE 2: TEST (Validate Candidates) ===
-        self.optimization_phase = 1  # Validation: 30% DD threshold
-        print("   🔬 Phase 2: Validating candidates on unseen data... (30% DD limit)")
+        # Generate Local Grid around Global Best
+        self.grid_params = self._generate_grid(center_params=best_global['raw'])
+        
+        # Find Top 10 from Refined Grid
+        refined_candidates = self._run_optimization(df_train, phase="TRAIN", top_n=10)
+        
+        if not refined_candidates:
+            print("   ⚠️ No valid parameters found in Refinement!")
+            return DEFAULT_PARAMS
+            
+        print(f"   ✅ Refined Best Score: {refined_candidates[0]['score']:.2f}")
+        
+        # === STAGE 3: VALIDATION (Test on Unseen Data) ===
+        self.optimization_phase = 1
+        print("   🔬 Stage 3: Validating candidates on unseen data... (30% DD limit)")
         
         best_validated_params = None
         best_validated_score = -999999
         
-        for i, candidate in enumerate(top_candidates):
-            # Run test on candidate
+        for i, candidate in enumerate(refined_candidates):
             test_result = self._test_single_params(df_test, candidate)
             
             if test_result['fitness'] <= -999000:
-                print(f"      ❌ Candidate #{i+1} FAILED validation (Death condition)")
+                print(f"      ❌ Candidate #{i+1} FAILED validation")
                 continue
             
-            # Check performance consistency
-            train_score = candidate['score']
-            test_score = test_result['fitness']
+            print(f"      ✅ Candidate #{i+1} PASSED! Train: {candidate['score']:.0f} | Test: {test_result['fitness']:.0f}")
             
-            # Allow some degradation, but not total collapse
-            # If train score is very high, test score might be lower but still good
-            
-            print(f"      ✅ Candidate #{i+1} PASSED! Train: {train_score:.0f} | Test: {test_score:.0f}")
-            
-            if test_score > best_validated_score:
-                best_validated_score = test_score
+            if test_result['fitness'] > best_validated_score:
+                best_validated_score = test_result['fitness']
                 best_validated_params = candidate
         
         if best_validated_params:
@@ -754,6 +801,7 @@ class GPUEngine:
                 b_res = cl.Buffer(ctx, mf.WRITE_ONLY, res.nbytes)
                 
                 # Use cached kernel if available, else get from program
+                device_name = "NVIDIA" if self.nvidia_ctx else "Intel"
                 kernel = getattr(self, f"{device_name.lower()}_kernel", None)
                 if not kernel:
                     kernel = cl.Kernel(prg, "portfolio_kernel")
@@ -831,6 +879,8 @@ class GPUEngine:
             best = df_res.iloc[i]
             if best['Fitness'] <= -999000: continue
             
+            raw_p = best[[f'P{k}' for k in range(40)]].values.astype(np.float32)
+            
             candidates.append({
                 'scalper': {
                     'rsi_period': best['P0'], 'rsi_buy': best['P1'], 'rsi_sell': best['P2'],
@@ -853,7 +903,8 @@ class GPUEngine:
                 },
                 'risk': 0.02,
                 'score': best['Fitness'],
-                'profit': best['NetProfit']
+                'profit': best['NetProfit'],
+                'raw': raw_p
             })
         
         return candidates
