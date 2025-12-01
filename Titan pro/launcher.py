@@ -99,31 +99,6 @@ def select_timeframe():
         except ValueError:
             print("❌ Invalid input! Please enter a number 1-5")
 
-def select_data_source():
-    print("\n📁 SELECT DATA SOURCE:")
-    print("   ─────────────────────────")
-    print("   [1] Dukascopy (Institutional, 6 months history)")
-    print("   [2] Deriv     (Live API, 3 months history)")
-    
-    while True:
-        try:
-            choice = input("\n👉 Enter choice (1-2): ").strip()
-            choice_num = int(choice)
-            
-            sources = {
-                1: ("dukascopy", "Dukascopy (Institutional)"),
-                2: ("deriv", "Deriv (Live API)")
-            }
-            
-            if choice_num in sources:
-                source, name = sources[choice_num]
-                print(f"\n✅ Selected: {name}")
-                return source
-            else:
-                print("❌ Invalid choice! Please enter 1-2")
-        except ValueError:
-            print("❌ Invalid input! Please enter a number 1-2")
-
 def configure_risk_management():
     print("\n🛡️ RISK MANAGEMENT CONFIGURATION:")
     print("   ─────────────────────────")
@@ -209,19 +184,12 @@ def main():
         data_source = 'dukascopy'
         source_name = 'Dukascopy (Real Market)'
     
-    print("\n" + "="*70)
-    print(f"📌 CONFIGURATION:")
-    print(f"   Market:      {market_name}")
-    print(f"   Symbol:      {symbol}")
-    print(f"   Type:        {'SYNTHETIC' if is_synthetic else 'REAL'}")
-    print(f"   Data Source: {source_name} (auto-detected)")
-    print(f"   Timeframe:   {tf_name}")
-    print(f"   Risk:        {risk*100:.1f}%")
-    print(f"   Daily Goal:  ${daily_goal}")
-    print(f"   Strategies:  Scalper + Breakout + Pullback")
-    print("="*70)
+    # Initialize working capital variables
+    working_capital = 50.0
+    account_balance = 50.0
+    currency = "USD"
     
-    # API TOKEN CHECK
+    # API TOKEN CHECK & BALANCE FETCH (for Deriv only)
     if data_source == 'deriv':
         config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "titan_config.json")
         import json
@@ -250,7 +218,47 @@ def main():
         if not token:
             print("❌ API Token is required for Deriv trading!")
             return
-            
+        
+        # Connect to get real balance
+        print("\n🔌 Connecting to Deriv to fetch account balance...")
+        from deriv_client import DerivClient
+        import time
+        
+        temp_client = DerivClient(token, symbol=symbol)
+        connected = temp_client.start(lambda t: None)
+        
+        if not connected:
+            print("❌ Failed to connect to Deriv API")
+            return
+        
+        time.sleep(1)  # Wait for auth
+        account_balance, currency = temp_client.get_balance()
+        
+        print(f"\n💰 ACCOUNT BALANCE: {account_balance} {currency}")
+        print("\n📊 WORKING CAPITAL SELECTION:")
+        print("   How much of your balance do you want to use for trading?")
+        print(f"   Available: {account_balance} {currency}")
+        
+        # Working capital selection
+        while True:
+            try:
+                wc_input = input(f"\n👉 Enter amount to trade (or % of balance, e.g., '50%'): ").strip()
+                
+                if '%' in wc_input:
+                    pct = float(wc_input.replace('%', '').strip()) / 100.0
+                    working_capital = account_balance * pct
+                else:
+                    working_capital = float(wc_input)
+                
+                if 0 < working_capital <= account_balance:
+                    pct_used = (working_capital / account_balance) * 100
+                    print(f"\n✅ Working Capital: {working_capital:.2f} {currency} ({pct_used:.1f}% of account)")
+                    break
+                else:
+                    print(f"❌ Amount must be between 0 and {account_balance}")
+            except:
+                print("❌ Invalid input. Try '50' or '50%'")
+        
         # Set token for titan_hybrid
         import titan_hybrid
         titan_hybrid.API_TOKEN = token
@@ -280,10 +288,8 @@ def main():
         print(f"📥 Downloading 3 months of {symbol} from {source_name}...")
         
         if data_source == 'dukascopy':
-            # Download from Dukascopy
             filepath = manager.update_dukascopy(symbol=symbol, months=3, force=True)
         else:
-            # Download from Deriv
             filepath = manager.update_deriv(symbol=symbol, months=3, force=True)
         
         if not filepath:
@@ -293,6 +299,19 @@ def main():
         print(f"✅ Downloaded 3 months of {symbol}")
     
     # Final confirmation
+    print("\n" + "="*70)
+    print(f"📌 FINAL CONFIGURATION:")
+    print(f"   Market:      {market_name}")
+    print(f"   Symbol:      {symbol}")
+    if data_source == 'deriv':
+        print(f"   Account:     {account_balance} {currency}")
+        print(f"   Working Cap: {working_capital:.2f} {currency} ({(working_capital/account_balance)*100:.1f}%)")
+    print(f"   Timeframe:   {tf_name}")
+    print(f"   Risk:        {risk*100:.1f}% per trade")
+    print(f"   Daily Goal:  ${daily_goal}")
+    print(f"   Max Loss:    ${max_loss}")
+    print("="*70)
+    
     confirm = input("\n✅ Start trading with these settings? (y/n): ").strip().lower()
     
     if confirm != 'y':
@@ -312,11 +331,13 @@ def main():
     titan_hybrid.SELECTED_TF_MINUTES = tf_minutes
     titan_hybrid.DATA_SOURCE = data_source
     
-    # Pass Risk Settings
+    # Pass Risk Settings and Working Capital
     titan_hybrid.RISK_PER_TRADE = risk
     titan_hybrid.DAILY_PROFIT_GOAL = daily_goal
     titan_hybrid.MAX_DAILY_LOSS = max_loss
     titan_hybrid.TOTAL_PROFIT_TARGET = total_target
+    titan_hybrid.WORKING_CAPITAL = working_capital
+    titan_hybrid.ACCOUNT_BALANCE = account_balance
     
     run_live_trading()
 

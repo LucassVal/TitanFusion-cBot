@@ -28,6 +28,10 @@ DAILY_PROFIT_GOAL = 50.0   # $50
 MAX_DAILY_LOSS = 25.0      # $25
 TOTAL_PROFIT_TARGET = 1000.0 # $1000
 
+# Balance Management (Set by launcher for Deriv)
+WORKING_CAPITAL = 50.0     # Amount to trade with
+ACCOUNT_BALANCE = 50.0     # Full account balance
+
 # Initial "Safe" Parameters (Fallback)
 DEFAULT_PARAMS = {
     'scalper': {'rsi_period': 10, 'os': 30, 'ob': 70, 'tp': 3.0, 'sl': 2.0},
@@ -77,7 +81,8 @@ __kernel void portfolio_kernel(
     __global const float* atr,
     __global const int* hour,
     const int num_candles,
-    const float initial_balance,   // NEW: User's real balance
+    const float initial_balance,   // User's working capital
+    const int optimization_phase,  // 0=train(15%), 1=validate(20%), 2=live(12%)
     __global const float* params,   // [S_P1..P5, B_P1..P5, P_P1..P5]
     __global float* results         // [NetProfit, Trades, Wins, MaxDD]
 ) {
@@ -148,13 +153,26 @@ __kernel void portfolio_kernel(
                     if (balance > max_equity) max_equity = balance;
                     float dd = max_equity - balance;
                     if (dd > max_dd) max_dd = dd;
-                    // Death condition: 35% drawdown (was 20%)
-                    float dd_threshold = initial_balance * 0.35f;
-                    if (dd >= dd_threshold) { balance = -initial_balance; i = num_candles; break; }
+                    
+                    // Tiered DD threshold based on phase
+                    float dd_threshold;
+                    if (optimization_phase == 0) {
+                        dd_threshold = initial_balance * 0.15f;  // Training: 15%
+                    } else if (optimization_phase == 1) {
+                        dd_threshold = initial_balance * 0.20f;  // Validation: 20%
+                    } else {
+                        dd_threshold = initial_balance * 0.12f;  // Live: 12%
+                    }
+                    
+                    if (dd >= dd_threshold) { 
+                        balance = -initial_balance; 
+                        i = num_candles; 
+                        break; 
+                    }
                 } else active_count++;
             }
         }
-        if (balance == -50.0f) break;
+        if (balance \u003c 0) break;  // Death condition hit
         
         // Entries
         bool time_ok = (h_day >= 7 && h_day < 20);
@@ -264,6 +282,7 @@ class CPUEngine:
 class GPUEngine:
     def __init__(self, initial_balance=50.0):
         self.initial_balance = initial_balance  # Store balance for kernel
+        self.optimization_phase = 0  # Default to training phase
         try:
             # Detect BOTH GPUs
             self.intel_device = None
@@ -308,6 +327,12 @@ class GPUEngine:
         """Update initial balance for optimization"""
         self.initial_balance = new_balance
         print(f"💰 GPU Engine: Balance updated to ${new_balance}")
+    
+    def set_phase(self, phase):
+        """Set optimization phase: 0=train, 1=validate, 2=live"""
+        self.optimization_phase = phase
+        phase_names = {0: "Training (15% DD)", 1: "Validation (20% DD)", 2: "Live Trading (12% DD)"}
+        print(f"🔧 GPU Engine: Phase set to {phase_names.get(phase, 'Unknown')}")
 
     def _generate_grid(self):
         # FULL FACTORIAL GRID - Each strategy gets INDEPENDENT parameters
@@ -480,7 +505,8 @@ class GPUEngine:
         print(f"   📊 Walk-Forward: Train={len(df_train)} candles | Test={len(df_test)} candles")
         
         # === PHASE 1: TRAIN (Find Best) ===
-        print("   🧠 Phase 1: Training on historical data...")
+        self.optimization_phase = 0  # Training: 15% DD threshold
+        print("   🧠 Phase 1: Training on historical data... (15% DD limit)")
         best_params, best_score = self._run_optimization(df_train, phase="TRAIN")
         
         if best_score <= -999000:
@@ -490,7 +516,8 @@ class GPUEngine:
         print(f"   ✅ Training Best Score: {best_score:.2f}")
         
         # === PHASE 2: TEST (Validate) ===
-        print("   🔬 Phase 2: Validating on unseen data...")
+        self.optimization_phase = 1  # Validation: 20% DD threshold
+        print("   🔬 Phase 2: Validating on unseen data... (20% DD limit)")
         
         # Run ONLY the best params on test set
         test_result = self._test_single_params(df_test, best_params)
@@ -555,7 +582,8 @@ class GPUEngine:
                 prg.portfolio_kernel(queue, (len(params),), None,
                     b_c, b_o, b_h, b_l, b_a, b_hr,
                     np.int32(len(c)), 
-                    np.float32(self.initial_balance),  # NEW: Pass real balance
+                    np.float32(self.initial_balance),  # Working capital
+                    np.int32(self.optimization_phase),  # Phase (0/1/2)
                     b_p, b_res)
                 queue.finish()
                 cl.enqueue_copy(queue, res, b_res)
@@ -829,42 +857,15 @@ def run_live_trading():
     print("="*50)
     print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
     
-    # Fallback: Try to load token from config if not set
-    global API_TOKEN
-    if not API_TOKEN and DATA_SOURCE == 'deriv':
-        try:
-            import json
-            config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "titan_config.json")
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    config = json.load(f)
-                    API_TOKEN = config.get('deriv_token')
-        except:
-            pass
-    
-    if not API_TOKEN:
-        print("❌ API Token not set! Run launcher.py")
-        return
-    
-    # Connect to Deriv and get real balance
-    print("🔌 Connecting to Deriv API...")
-    temp_client = DerivClient(API_TOKEN, symbol=SELECTED_SYMBOL)
-    connected = temp_client.start(lambda t: None)
-    
-    if not connected:
-        print("❌ Failed to connect to Deriv API")
-        return
-    
-    time.sleep(1)  # Wait for auth
-    real_balance, currency = temp_client.get_balance()
-    
-    print(f"💰 Balance: {real_balance} {currency}")
+    # Use working capital from launcher
+    working_capital = WORKING_CAPITAL
+    print(f"💰 Working Capital: ${working_capital:.2f}")
     print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
     print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
     print("="*50)
     
-    # Initialize trader with real balance
-    trader = HybridTrader(initial_balance=real_balance)
+    # Initialize trader with working capital
+    trader = HybridTrader(initial_balance=working_capital)
     trader.initialize_with_history()  # Pre-flight check
 
     client = DerivClient(token=API_TOKEN)
