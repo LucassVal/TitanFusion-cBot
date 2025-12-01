@@ -790,20 +790,6 @@ class HybridTrader:
                 
                 best_result = self.gpu.optimize(data)
                 
-                duration = time.time() - start
-                print(f"🧠 GPU: Optimization Complete in {duration:.2f}s | Best Score: {best_result['score']:.2f}")
-                
-                if best_result['score'] > -9000: # Valid result
-                    self.cpu.update_params(best_result)
-                    print("   [System Updated with New Parameters]\n")
-                
-            except queue.Empty:
-    print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
-    
-    # Use working capital from launcher
-    working_capital = WORKING_CAPITAL
-    print(f"💰 Working Capital: ${working_capital:.2f}")
-    print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
     print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
     print("="*50)
     
