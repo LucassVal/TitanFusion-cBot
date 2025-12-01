@@ -1,20 +1,3 @@
-# Titan Pro - One-Line Installer
-# Inspired by ChrisTitusTech's WinUtil
-# Usage: irm https://raw.githubusercontent.com/LucassVal/TitanFusion-cBot/main/install.ps1 | iex
-
-Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "   🚀 TITAN PRO - HYBRID GPU TRADING SYSTEM" -ForegroundColor Yellow
-Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host ""
-
-$repo = "LucassVal/TitanFusion-cBot"
-$branch = "main"
-$installPath = "$env:USERPROFILE\TitanPro"
-
-# Check if already installed
-if (Test-Path $installPath) {
-    Write-Host "⚠️  Titan Pro already installed at: $installPath" -ForegroundColor Yellow
-    $update = Read-Host "Update to latest version? (y/n)"
     
     if ($update -ne 'y') {
         Write-Host "Installation cancelled." -ForegroundColor Red

@@ -344,22 +344,6 @@ Action:
 
 Reason: Prevent trading in blind (no data)
 ```
-
----
-
-## 5. System Components
-
-### 5.1 File Structure
-```
-TitanFusion-cBot/
-├── Titan pro/
-│   ├── launcher.py          # User interface & configuration
-│   ├── titan_hybrid.py      # Core trading engine (GPU + CPU)
-│   ├── deriv_client.py      # WebSocket API client
-│   ├── deriv_downloader.py  # Historical data fetcher
-│   ├── dukascopy_downloader.py  # Forex data fetcher
-│   ├── data_manager.py      # Data caching & updates
-│   └── dashboard.html       # Web-based monitoring UI
 ├── README.md                # Quick start guide
 ├── WIKI.md                  # This file
 ├── LICENSE                  # MIT License

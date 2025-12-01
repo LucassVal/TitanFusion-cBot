@@ -16,7 +16,7 @@ We believe in open collaboration, knowledge sharing, and helping each other grow
 ```bash
 # Fork on GitHub, then:
 git clone https://github.com/YOUR_USERNAME/TitanFusion-cBot.git
-cd TitanFusion-cBot
+cd TitanFusion-Antigravity
 ```
 
 ### **2. Create Branch**

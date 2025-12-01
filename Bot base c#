@@ -49,16 +49,16 @@ namespace cAlgo.Robots
         [Parameter("🏃 Enable Trailing SAR?", Group = "2. Smart Exits", DefaultValue = true)]
         public bool TrailingSarEnabled { get; set; }
         
-        [Parameter("📈 SAR Min AF", Group = "2. Smart Exits", DefaultValue = 0.02)]
+        [Parameter("📈 SAR Min AF", Group = "2. Smart Exits", DefaultValue = 0.02, MinValue = 0.01, MaxValue = 0.1, Step = 0.01)]
         public double SarMinAF { get; set; }
         
-        [Parameter("📉 SAR Max AF", Group = "2. Smart Exits", DefaultValue = 0.2)]
+        [Parameter("📉 SAR Max AF", Group = "2. Smart Exits", DefaultValue = 0.2, MinValue = 0.1, MaxValue = 0.5, Step = 0.05)]
         public double SarMaxAF { get; set; }
         
         [Parameter("🔒 Enable Partial TP?", Group = "2. Smart Exits", DefaultValue = true)]
         public bool PartialTpEnabled { get; set; }
         
-        [Parameter("🎯 Partial Trigger (ATR Multi)", Group = "2. Smart Exits", DefaultValue = 1.0)]
+        [Parameter("🎯 Partial Trigger (ATR Multi)", Group = "2. Smart Exits", DefaultValue = 1.0, MinValue = 0.5, MaxValue = 3.0, Step = 0.1)]
         public double PartialTpAtrMultiplier { get; set; }
         
         [Parameter("🖥️ Show Text Info?", Group = "3. Filters & Visual", DefaultValue = true)]
@@ -85,28 +85,28 @@ namespace cAlgo.Robots
         [Parameter("📦 Base Volume (Scalper)", Group = "⚡ Scalper", DefaultValue = 0.01)]
         public double ScalperFixedVolume { get; set; }
         
-        [Parameter("📊 RSI Period", Group = "⚡ Scalper", DefaultValue = 14)]
+        [Parameter("📊 RSI Period", Group = "⚡ Scalper", DefaultValue = 14, MinValue = 2, MaxValue = 100, Step = 1)]
         public int ScalperRSIPeriod { get; set; }
         
-        [Parameter("🔵 Oversold Level", Group = "⚡ Scalper", DefaultValue = 30)]
+        [Parameter("🔵 Oversold Level", Group = "⚡ Scalper", DefaultValue = 30, MinValue = 10, MaxValue = 45, Step = 1)]
         public int RsiOversold { get; set; }
         
-        [Parameter("🔴 Overbought Level", Group = "⚡ Scalper", DefaultValue = 70)]
+        [Parameter("🔴 Overbought Level", Group = "⚡ Scalper", DefaultValue = 70, MinValue = 55, MaxValue = 90, Step = 1)]
         public int RsiOverbought { get; set; }
         
-        [Parameter("🎯 Scalper TP ATR", Group = "⚡ Scalper", DefaultValue = 3.0)]
+        [Parameter("🎯 Scalper TP ATR", Group = "⚡ Scalper", DefaultValue = 3.0, MinValue = 1.0, MaxValue = 10.0, Step = 0.5)]
         public double ScalperTpAtr { get; set; }
         
-        [Parameter("🛑 Scalper SL ATR", Group = "⚡ Scalper", DefaultValue = 2.0)]
+        [Parameter("🛑 Scalper SL ATR", Group = "⚡ Scalper", DefaultValue = 2.0, MinValue = 1.0, MaxValue = 5.0, Step = 0.5)]
         public double ScalperSlAtr { get; set; }
 
         [Parameter("📦 Base Volume (Breakout)", Group = "💥 Breakout", DefaultValue = 0.01)]
         public double BreakoutFixedVolume { get; set; }
         
-        [Parameter("📊 BB Period", Group = "💥 Breakout", DefaultValue = 20)]
+        [Parameter("📊 BB Period", Group = "💥 Breakout", DefaultValue = 20, MinValue = 10, MaxValue = 100, Step = 2)]
         public int BBPeriod { get; set; }
         
-        [Parameter("📏 BB Deviation", Group = "💥 Breakout", DefaultValue = 2.0)]
+        [Parameter("📏 BB Deviation", Group = "💥 Breakout", DefaultValue = 2.0, MinValue = 1.0, MaxValue = 4.0, Step = 0.1)]
         public double BBDeviation { get; set; }
         
         [Parameter("⚠️ Max Band Width", Group = "💥 Breakout", DefaultValue = 500.0)]
@@ -115,28 +115,28 @@ namespace cAlgo.Robots
         [Parameter("🕯️ Min Body Ratio", Group = "💥 Breakout", DefaultValue = 0.5)]
         public double MinBodyRatio { get; set; }
         
-        [Parameter("🎯 Breakout TP ATR", Group = "💥 Breakout", DefaultValue = 5.0)]
+        [Parameter("🎯 Breakout TP ATR", Group = "💥 Breakout", DefaultValue = 5.0, MinValue = 2.0, MaxValue = 15.0, Step = 0.5)]
         public double BreakoutTpAtr { get; set; }
         
-        [Parameter("🛑 Breakout SL ATR", Group = "💥 Breakout", DefaultValue = 1.5)]
+        [Parameter("🛑 Breakout SL ATR", Group = "💥 Breakout", DefaultValue = 1.5, MinValue = 1.0, MaxValue = 5.0, Step = 0.5)]
         public double BreakoutSlAtr { get; set; }
 
         [Parameter("📦 Base Volume (Pullback)", Group = "🌊 Pullback", DefaultValue = 0.01)]
         public double PullbackFixedVolume { get; set; }
         
-        [Parameter("📈 Trend EMA Fast", Group = "🌊 Pullback", DefaultValue = 34)]
+        [Parameter("📈 Trend EMA Fast", Group = "🌊 Pullback", DefaultValue = 34, MinValue = 10, MaxValue = 200, Step = 5)]
         public int TrendEmaFast { get; set; }
         
-        [Parameter("📉 Trend EMA Slow", Group = "🌊 Pullback", DefaultValue = 144)]
+        [Parameter("📉 Trend EMA Slow", Group = "🌊 Pullback", DefaultValue = 144, MinValue = 20, MaxValue = 400, Step = 10)]
         public int TrendEmaSlow { get; set; }
         
-        [Parameter("📉 Pullback RSI Trigger", Group = "🌊 Pullback", DefaultValue = 40)]
+        [Parameter("📉 Pullback RSI Trigger", Group = "🌊 Pullback", DefaultValue = 40, MinValue = 20, MaxValue = 50, Step = 2)]
         public int PullbackRsiTrigger { get; set; }
         
-        [Parameter("🎯 Pullback TP ATR", Group = "🌊 Pullback", DefaultValue = 4.0)]
+        [Parameter("🎯 Pullback TP ATR", Group = "🌊 Pullback", DefaultValue = 4.0, MinValue = 2.0, MaxValue = 15.0, Step = 0.5)]
         public double PullbackTpAtr { get; set; }
         
-        [Parameter("🛑 Pullback SL ATR", Group = "🌊 Pullback", DefaultValue = 1.5)]
+        [Parameter("🛑 Pullback SL ATR", Group = "🌊 Pullback", DefaultValue = 1.5, MinValue = 1.0, MaxValue = 5.0, Step = 0.5)]
         public double PullbackSlAtr { get; set; }
         #endregion
 

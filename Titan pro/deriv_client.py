@@ -8,6 +8,26 @@ import threading
 APP_ID = 1089
 DEFAULT_SYMBOL = "R_75"  # Volatility 75 Index
 
+class RateLimiter:
+    def __init__(self, max_calls, period=1.0):
+        self.max_calls = max_calls
+        self.period = period
+        self.calls = []
+        self.lock = asyncio.Lock()
+
+    async def wait(self):
+        async with self.lock:
+            now = time.time()
+            # Remove calls older than the period
+            self.calls = [t for t in self.calls if now - t < self.period]
+            
+            if len(self.calls) >= self.max_calls:
+                sleep_time = self.calls[0] + self.period - now
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+            
+            self.calls.append(time.time())
+
 class DerivClient:
     def __init__(self, token, app_id=APP_ID, symbol=DEFAULT_SYMBOL):
         self.url = f"wss://ws.binaryws.com/websockets/v3?app_id={app_id}"
@@ -26,6 +46,9 @@ class DerivClient:
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
         self.ping_task = None
+        
+        # Rate Limiter: 4 requests per second (safe margin: 3/s)
+        self.rate_limiter = RateLimiter(max_calls=3, period=1.0)
 
     def _run_loop(self):
         asyncio.set_event_loop(self.loop)
@@ -48,6 +71,7 @@ class DerivClient:
             return False
 
     async def authorize(self):
+        await self.rate_limiter.wait()
         req = {"authorize": self.token}
         await self.ws.send(json.dumps(req))
         res = await self.ws.recv()
@@ -77,6 +101,7 @@ class DerivClient:
             while self.is_connected:
                 await asyncio.sleep(30)
                 if self.ws and not self.ws.closed:
+                    await self.rate_limiter.wait()
                     await self.ws.send(json.dumps({"ping": 1}))
         except asyncio.CancelledError:
             pass
@@ -88,6 +113,7 @@ class DerivClient:
         return self.balance, self.currency
 
     async def subscribe_ticks(self):
+        await self.rate_limiter.wait()
         req = {"ticks": self.symbol, "subscribe": 1}
         await self.ws.send(json.dumps(req))
         print(f"📡 Subscribed to {self.symbol} ticks")

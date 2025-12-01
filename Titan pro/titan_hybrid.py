@@ -126,6 +126,8 @@ __kernel void portfolio_kernel(
     float s_tp_atr     = params[offset + 8];
     float s_sl_atr     = params[offset + 9];
     float s_body_min   = params[offset + 10];
+    float s_max_spread = params[offset + 11]; // New
+    float s_flat_pips  = params[offset + 12]; // New
     
     // Breakout (12 params) - Offset 15
     float b_bb_period  = params[offset + 15];
@@ -138,6 +140,8 @@ __kernel void portfolio_kernel(
     float b_atr_min    = params[offset + 22];
     float b_tp_atr     = params[offset + 23];
     float b_sl_atr     = params[offset + 24];
+    float b_max_spread = params[offset + 25]; // New
+    float b_flat_pips  = params[offset + 26]; // New
     
     // Pullback (13 params) - Offset 27
     float p_fast_ema   = params[offset + 27];
@@ -148,6 +152,8 @@ __kernel void portfolio_kernel(
     float p_atr_min    = params[offset + 32];
     float p_tp_atr     = params[offset + 33];
     float p_sl_atr     = params[offset + 34];
+    float p_max_spread = params[offset + 35]; // New
+    float p_flat_pips  = params[offset + 36]; // New
     
     float risk_per_trade = 0.02f; 
 
@@ -264,14 +270,16 @@ __kernel void portfolio_kernel(
             // SCALPER
             bool s_time = (h_day >= (int)s_hour_start && h_day <= (int)s_hour_end);
             bool s_vol = (atr_pips >= s_atr_min && atr_pips <= s_atr_max);
+            bool s_flat = (atr_pips >= s_flat_pips); // Flat market filter
             bool s_trend = (adx_val >= s_adx_min);
             bool s_body = (body_pct >= s_body_min);
             
-            bool s_buy_sig = (s_time && s_vol && s_trend && s_body && s_rsi_prev <= s_rsi_buy && s_rsi > s_rsi_buy);
-            bool s_sell_sig = (s_time && s_vol && s_trend && s_body && s_rsi_prev >= s_rsi_sell && s_rsi < s_rsi_sell);
+            bool s_buy_sig = (s_time && s_vol && s_flat && s_trend && s_body && s_rsi_prev <= s_rsi_buy && s_rsi > s_rsi_buy);
+            bool s_sell_sig = (s_time && s_vol && s_flat && s_trend && s_body && s_rsi_prev >= s_rsi_sell && s_rsi < s_rsi_sell);
             
             // BREAKOUT
             bool b_vol = (atr_pips >= b_atr_min);
+            bool b_flat = (atr_pips >= b_flat_pips);
             bool b_body = (body_pct >= b_body_min);
             
             float sma = bb_sum / bb_p; float sum_sq = 0.0f;
@@ -285,19 +293,20 @@ __kernel void portfolio_kernel(
             float upper = sma + b_bb_dev * std; float lower = sma - b_bb_dev * std; float width = (upper - lower) * 10.0f;
             
             bool b_buy_sig = false, b_sell_sig = false;
-            if (b_vol && b_body && width >= b_min_width && width <= b_max_width) {
+            if (b_vol && b_flat && b_body && width >= b_min_width && width <= b_max_width) {
                  if (c > upper && b_rsi > b_rsi_thresh && c > b_ema) b_buy_sig = true;
                  else if (c < lower && b_rsi < (100-b_rsi_thresh) && c < b_ema) b_sell_sig = true;
             }
             
             // PULLBACK
             bool p_vol = (atr_pips >= p_atr_min);
+            bool p_flat = (atr_pips >= p_flat_pips);
             bool p_trend = (adx_val >= p_adx_min);
             bool uptrend = p_ema_fast > p_ema_slow;
             bool downtrend = p_ema_fast < p_ema_slow;
             
-            bool p_buy_sig = (p_vol && p_trend && uptrend && p_rsi < p_rsi_buy);
-            bool p_sell_sig = (p_vol && p_trend && downtrend && p_rsi > p_rsi_sell);
+            bool p_buy_sig = (p_vol && p_flat && p_trend && uptrend && p_rsi < p_rsi_buy);
+            bool p_sell_sig = (p_vol && p_flat && p_trend && downtrend && p_rsi > p_rsi_sell);
             
             // EXECUTE
             int entry_dir = 0; float sl_m = 0, tp_m = 0;
@@ -507,119 +516,6 @@ class GPUEngine:
         # If center_params is provided, generates grid around it (Refinement)
         # If None, generates Global Grid with WIDE ranges (1-150+)
         import random
-        random.seed(42)
-        
-        combos = []
-        num_samples = 500000
-        
-        if center_params is None:
-            # === GLOBAL SEARCH (WIDE RANGES) ===
-            print("   🌍 Generating Global Grid (Wide Ranges 1-150+)...")
-            
-            # Scalper (15)
-            s_rsi_period = list(range(3, 150, 2))
-            s_rsi_buy    = list(range(5, 55, 5))
-            s_rsi_sell   = list(range(45, 95, 5))
-            s_atr_min    = [1, 2, 3, 5, 8, 10, 15, 20, 30, 50]
-            s_atr_max    = [50, 100, 200, 300, 500, 800, 1000]
-            s_adx_min    = [0, 10, 15, 20, 25, 30, 40]
-            s_hour_start = [0, 2, 4, 6, 8, 10]
-            s_hour_end   = [14, 16, 18, 20, 22]
-            s_tp_atr     = [1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0, 15.0]
-            s_sl_atr     = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]
-            s_body_min   = [0.3, 0.5, 0.7, 0.9]
-            
-            # Breakout (12)
-            b_bb_period  = list(range(10, 150, 5))
-            b_bb_dev     = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
-            b_min_width  = [5, 10, 20, 50, 100]
-            b_max_width  = [100, 200, 500, 800, 1000, 1500]
-            b_rsi_thresh = [40, 45, 50, 55, 60, 65, 70]
-            b_ema_period = list(range(20, 300, 10))
-            b_body_min   = [0.3, 0.5, 0.7]
-            b_atr_min    = [1, 5, 10, 20, 50]
-            b_tp_atr     = [2.0, 4.0, 6.0, 8.0, 10.0, 15.0, 20.0]
-            b_sl_atr     = [1.0, 2.0, 3.0, 5.0]
-            
-            # Pullback (13)
-            p_fast_ema   = list(range(5, 100, 5))
-            p_slow_ema   = list(range(50, 300, 10))
-            p_rsi_buy    = list(range(20, 60, 5))
-            p_rsi_sell   = list(range(40, 80, 5))
-            p_adx_min    = [10, 20, 30, 40, 50]
-            p_atr_min    = [1, 5, 10, 20, 50]
-            p_tp_atr     = [2.0, 4.0, 6.0, 8.0, 10.0, 15.0]
-            p_sl_atr     = [1.0, 2.0, 3.0, 5.0]
-
-            for _ in range(num_samples):
-                combo = []
-                # Scalper
-                combo.extend([
-                    random.choice(s_rsi_period), random.choice(s_rsi_buy), random.choice(s_rsi_sell),
-                    random.choice(s_atr_min), random.choice(s_atr_max), random.choice(s_adx_min),
-                    random.choice(s_hour_start), random.choice(s_hour_end),
-                    random.choice(s_tp_atr), random.choice(s_sl_atr), random.choice(s_body_min),
-                    0, 0, 0, 0
-                ])
-                # Breakout
-                combo.extend([
-                    random.choice(b_bb_period), random.choice(b_bb_dev),
-                    random.choice(b_min_width), random.choice(b_max_width),
-                    random.choice(b_rsi_thresh), random.choice(b_ema_period),
-                    random.choice(b_body_min), random.choice(b_atr_min),
-                    random.choice(b_tp_atr), random.choice(b_sl_atr),
-                    0, 0
-                ])
-                # Pullback
-                combo.extend([
-                    random.choice(p_fast_ema), random.choice(p_slow_ema),
-                    random.choice(p_rsi_buy), random.choice(p_rsi_sell),
-                    random.choice(p_adx_min), random.choice(p_atr_min),
-                    random.choice(p_tp_atr), random.choice(p_sl_atr),
-                    0, 0, 0, 0, 0
-                ])
-                combos.append(combo)
-                
-        else:
-            # === REFINEMENT SEARCH (LOCAL GRID) ===
-            print("   🎯 Generating Refinement Grid (Focused around best)...")
-            c = center_params # Array of 40 floats
-            
-            # Helper to create range around value
-            def get_range(val, step, count=5):
-                return [val + (i - count//2)*step for i in range(count) if val + (i - count//2)*step > 0]
-            
-            for _ in range(num_samples):
-                combo = []
-                # Scalper (Indices 0-10)
-                combo.extend([
-                    random.choice(get_range(c[0], 2)), random.choice(get_range(c[1], 2)), random.choice(get_range(c[2], 2)),
-                    random.choice(get_range(c[3], 2)), random.choice(get_range(c[4], 10)), random.choice(get_range(c[5], 5)),
-                    random.choice(get_range(c[6], 1)), random.choice(get_range(c[7], 1)),
-                    random.choice(get_range(c[8], 0.5)), random.choice(get_range(c[9], 0.5)), random.choice(get_range(c[10], 0.1)),
-                    0, 0, 0, 0
-                ])
-                # Breakout (Indices 15-24)
-                combo.extend([
-                    random.choice(get_range(c[15], 2)), random.choice(get_range(c[16], 0.1)),
-                    random.choice(get_range(c[17], 5)), random.choice(get_range(c[18], 50)),
-                    random.choice(get_range(c[19], 2)), random.choice(get_range(c[20], 10)),
-                    random.choice(get_range(c[21], 0.1)), random.choice(get_range(c[22], 2)),
-                    random.choice(get_range(c[23], 1.0)), random.choice(get_range(c[24], 0.5)),
-                    0, 0
-                ])
-                # Pullback (Indices 27-34)
-                combo.extend([
-                    random.choice(get_range(c[27], 5)), random.choice(get_range(c[28], 10)),
-                    random.choice(get_range(c[29], 2)), random.choice(get_range(c[30], 2)),
-                    random.choice(get_range(c[31], 5)), random.choice(get_range(c[32], 2)),
-                    random.choice(get_range(c[33], 1.0)), random.choice(get_range(c[34], 0.5)),
-                    0, 0, 0, 0, 0
-                ])
-                combos.append(combo)
-
-        print(f"🧠 Generated {len(combos)} combinations")
-        return np.array(combos, dtype=np.float32)
 
     def calculate_ultra_robust_fitness(self, row):
         net = row['NetProfit']
@@ -886,20 +782,23 @@ class GPUEngine:
                     'rsi_period': best['P0'], 'rsi_buy': best['P1'], 'rsi_sell': best['P2'],
                     'atr_min': best['P3'], 'atr_max': best['P4'], 'adx_min': best['P5'],
                     'hour_start': best['P6'], 'hour_end': best['P7'],
-                    'tp': best['P8'], 'sl': best['P9'], 'body_min': best['P10']
+                    'tp': best['P8'], 'sl': best['P9'], 'body_min': best['P10'],
+                    'max_spread': best['P11'], 'flat_pips': best['P12']
                 },
                 'breakout': {
                     'bb_period': best['P15'], 'dev': best['P16'], 
                     'min_w': best['P17'], 'max_w': best['P18'],
                     'rsi_thresh': best['P19'], 'ema_period': best['P20'],
                     'body_min': best['P21'], 'atr_min': best['P22'],
-                    'tp': best['P23'], 'sl': best['P24']
+                    'tp': best['P23'], 'sl': best['P24'],
+                    'max_spread': best['P25'], 'flat_pips': best['P26']
                 },
                 'pullback': {
                     'fast': best['P27'], 'slow': best['P28'],
                     'rsi_buy': best['P29'], 'rsi_sell': best['P30'],
                     'adx_min': best['P31'], 'atr_min': best['P32'],
-                    'tp': best['P33'], 'sl': best['P34']
+                    'tp': best['P33'], 'sl': best['P34'],
+                    'max_spread': best['P35'], 'flat_pips': best['P36']
                 },
                 'risk': 0.02,
                 'score': best['Fitness'],
