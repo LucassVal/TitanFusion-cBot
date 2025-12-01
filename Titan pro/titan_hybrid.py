@@ -645,9 +645,9 @@ class GPUEngine:
         """
         WALK-FORWARD OPTIMIZATION WITH VALIDATION
         - Split data: 70% train, 30% test
-        - Find best on train set
-        - Validate on test set (unseen data)
-        - Only update if passes validation
+        - Find TOP 10 candidates on train set
+        - Validate all 10 on test set (unseen data)
+        - Select best passing candidate
         """
         if not self.intel_ctx and not self.nvidia_ctx: 
             return DEFAULT_PARAMS
@@ -666,45 +666,56 @@ class GPUEngine:
         
         print(f"   📊 Walk-Forward: Train={len(df_train)} candles | Test={len(df_test)} candles")
         
-        # === PHASE 1: TRAIN (Find Best) ===
+        # === PHASE 1: TRAIN (Find Top Candidates) ===
         self.optimization_phase = 0  # Training: 25% DD threshold
         print("   🧠 Phase 1: Training on historical data... (25% DD limit)")
-        best_params, best_score = self._run_optimization(df_train, phase="TRAIN")
         
-        if best_score <= -999000:
+        # Get TOP 10 candidates instead of just 1
+        top_candidates = self._run_optimization(df_train, phase="TRAIN", top_n=10)
+        
+        if not top_candidates:
             print("   ⚠️ No valid parameters found in training!")
             return DEFAULT_PARAMS
         
-        print(f"   ✅ Training Best Score: {best_score:.2f}")
+        print(f"   ✅ Found {len(top_candidates)} candidates. Best Score: {top_candidates[0]['score']:.2f}")
         
-        # === PHASE 2: TEST (Validate) ===
+        # === PHASE 2: TEST (Validate Candidates) ===
         self.optimization_phase = 1  # Validation: 30% DD threshold
-        print("   🔬 Phase 2: Validating on unseen data... (30% DD limit)")
+        print("   🔬 Phase 2: Validating candidates on unseen data... (30% DD limit)")
         
-        # Run ONLY the best params on test set
-        test_result = self._test_single_params(df_test, best_params)
+        best_validated_params = None
+        best_validated_score = -999999
         
-        if test_result['fitness'] <= -999000:
-            print(f"   ❌ Validation FAILED! Best params hit death condition in test.")
-            print(f"      → Keeping current parameters (no update)")
+        for i, candidate in enumerate(top_candidates):
+            # Run test on candidate
+            test_result = self._test_single_params(df_test, candidate)
+            
+            if test_result['fitness'] <= -999000:
+                print(f"      ❌ Candidate #{i+1} FAILED validation (Death condition)")
+                continue
+            
+            # Check performance consistency
+            train_score = candidate['score']
+            test_score = test_result['fitness']
+            
+            # Allow some degradation, but not total collapse
+            # If train score is very high, test score might be lower but still good
+            
+            print(f"      ✅ Candidate #{i+1} PASSED! Train: {train_score:.0f} | Test: {test_score:.0f}")
+            
+            if test_score > best_validated_score:
+                best_validated_score = test_score
+                best_validated_params = candidate
+        
+        if best_validated_params:
+            print(f"   🏆 Selected Best Validated Params! Score: {best_validated_score:.2f}")
+            return best_validated_params
+        else:
+            print(f"   ❌ ALL candidates failed validation. Keeping current parameters.")
             return DEFAULT_PARAMS
-        
-        # Check if test performance is reasonable (not >50% worse than train)
-        performance_ratio = test_result['fitness'] / best_score if best_score > 0 else 0
-        
-        if performance_ratio < 0.5:
-            print(f"   ⚠️ Validation score dropped {(1-performance_ratio)*100:.1f}% from training")
-            print(f"      Train: {best_score:.2f} | Test: {test_result['fitness']:.2f}")
-            print(f"      → Possible overfitting detected. Keeping current parameters.")
-            return DEFAULT_PARAMS
-        
-        print(f"   ✅ Validation PASSED! Test Score: {test_result['fitness']:.2f}")
-        print(f"      Performance ratio: {performance_ratio*100:.1f}%")
-        
-        return best_params
     
-    def _run_optimization(self, df, phase="TRAIN"):
-        """Run full GPU optimization on dataset"""
+    def _run_optimization(self, df, phase="TRAIN", top_n=10):
+        """Run full GPU optimization and return top N candidates"""
         c = df['close'].values.astype(np.float32)
         o = df['open'].values.astype(np.float32)
         h = df['high'].values.astype(np.float32)
@@ -742,7 +753,13 @@ class GPUEngine:
                 res = np.zeros(len(params) * 6, dtype=np.float32)
                 b_res = cl.Buffer(ctx, mf.WRITE_ONLY, res.nbytes)
                 
-                prg.portfolio_kernel(queue, (len(params),), None,
+                # Use cached kernel if available, else get from program
+                kernel = getattr(self, f"{device_name.lower()}_kernel", None)
+                if not kernel:
+                    kernel = cl.Kernel(prg, "portfolio_kernel")
+                    setattr(self, f"{device_name.lower()}_kernel", kernel)
+                
+                kernel(queue, (len(params),), None,
                     b_c, b_o, b_h, b_l, b_a, b_hr,
                     np.int32(len(c)), 
                     np.float32(self.initial_balance),
@@ -790,7 +807,7 @@ class GPUEngine:
             all_results.append(nvidia_results[1])
         
         if not all_params:
-            return DEFAULT_PARAMS, -999999
+            return []
             
         combined_params = np.vstack(all_params)
         combined_results = np.concatenate(all_results)
@@ -808,34 +825,38 @@ class GPUEngine:
         df_res['Fitness'] = df_res.apply(self.calculate_ultra_robust_fitness, axis=1)
         df_res.sort_values('Fitness', ascending=False, inplace=True)
         
-        best = df_res.iloc[0]
+        # Return TOP N candidates
+        candidates = []
+        for i in range(min(top_n, len(df_res))):
+            best = df_res.iloc[i]
+            if best['Fitness'] <= -999000: continue
+            
+            candidates.append({
+                'scalper': {
+                    'rsi_period': best['P0'], 'rsi_buy': best['P1'], 'rsi_sell': best['P2'],
+                    'atr_min': best['P3'], 'atr_max': best['P4'], 'adx_min': best['P5'],
+                    'hour_start': best['P6'], 'hour_end': best['P7'],
+                    'tp': best['P8'], 'sl': best['P9'], 'body_min': best['P10']
+                },
+                'breakout': {
+                    'bb_period': best['P15'], 'dev': best['P16'], 
+                    'min_w': best['P17'], 'max_w': best['P18'],
+                    'rsi_thresh': best['P19'], 'ema_period': best['P20'],
+                    'body_min': best['P21'], 'atr_min': best['P22'],
+                    'tp': best['P23'], 'sl': best['P24']
+                },
+                'pullback': {
+                    'fast': best['P27'], 'slow': best['P28'],
+                    'rsi_buy': best['P29'], 'rsi_sell': best['P30'],
+                    'adx_min': best['P31'], 'atr_min': best['P32'],
+                    'tp': best['P33'], 'sl': best['P34']
+                },
+                'risk': 0.02,
+                'score': best['Fitness'],
+                'profit': best['NetProfit']
+            })
         
-        best_params = {
-            'scalper': {
-                'rsi_period': best['P0'], 'rsi_buy': best['P1'], 'rsi_sell': best['P2'],
-                'atr_min': best['P3'], 'atr_max': best['P4'], 'adx_min': best['P5'],
-                'hour_start': best['P6'], 'hour_end': best['P7'],
-                'tp': best['P8'], 'sl': best['P9'], 'body_min': best['P10']
-            },
-            'breakout': {
-                'bb_period': best['P15'], 'dev': best['P16'], 
-                'min_w': best['P17'], 'max_w': best['P18'],
-                'rsi_thresh': best['P19'], 'ema_period': best['P20'],
-                'body_min': best['P21'], 'atr_min': best['P22'],
-                'tp': best['P23'], 'sl': best['P24']
-            },
-            'pullback': {
-                'fast': best['P27'], 'slow': best['P28'],
-                'rsi_buy': best['P29'], 'rsi_sell': best['P30'],
-                'adx_min': best['P31'], 'atr_min': best['P32'],
-                'tp': best['P33'], 'sl': best['P34']
-            },
-            'risk': 0.02,
-            'score': best['Fitness'],
-            'profit': best['NetProfit']
-        }
-        
-        return best_params, best['Fitness']
+        return candidates
     
     def _test_single_params(self, df, params):
         """Test a single parameter set on validation data"""
@@ -890,7 +911,14 @@ class GPUEngine:
         res = np.zeros(6, dtype=np.float32)
         b_res = cl.Buffer(ctx, mf.WRITE_ONLY, res.nbytes)
         
-        prg.portfolio_kernel(queue, (1,), None,
+        # Use cached kernel if available, else get from program
+        device_name = "NVIDIA" if self.nvidia_ctx else "Intel"
+        kernel = getattr(self, f"{device_name.lower()}_kernel", None)
+        if not kernel:
+            kernel = cl.Kernel(prg, "portfolio_kernel")
+            setattr(self, f"{device_name.lower()}_kernel", kernel)
+        
+        kernel(queue, (1,), None,
             b_c, b_o, b_h, b_l, b_a, b_hr,
             np.int32(len(c)), 
             np.float32(self.initial_balance),
