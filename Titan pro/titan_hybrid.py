@@ -408,6 +408,50 @@ class GPUEngine:
         - Rewards consistency over flash performance
         """
         net = row['NetProfit']
+        trades = row['Trades']
+        wins = row['Wins']
+        dd = row['MaxDD']
+        
+        # === HARD FILTERS (Instant Rejection) ===
+        if dd >= 10.0:
+            return -999999  # Death condition
+        if trades < 20:
+            return -999999  # Too few trades = no statistical significance
+        if trades > 500:
+            return -999999  # Too many trades = overtrading (overfitting signal)
+        
+        # === CALCULATE METRICS ===
+        win_rate = wins / trades if trades > 0 else 0
+        loss_count = trades - wins
+        avg_win = net / wins if wins > 0 else 0
+        avg_loss = abs(net) / loss_count if loss_count > 0 and net < 0 else 0.01
+        
+        # Profit Factor
+        profit_factor = avg_win / avg_loss if avg_loss > 0 else 0
+        
+        # Sharpe-like Ratio (reward/risk)
+        sharpe = net / dd if dd > 0 else 0
+        
+        # === ANTI-OVERFITTING PENALTIES ===
+        
+        # 1. Win Rate Penalty (too high = overfitting)
+        if win_rate > 0.75:
+            wr_penalty = 0.5  # 75%+ win rate is suspicious
+        elif win_rate < 0.40:
+            wr_penalty = 0.6  # Too low is bad
+        else:
+            wr_penalty = 1.0  # Sweet spot: 40-75%
+        
+        # 2. Profit Factor Penalty (too high = curve fitting)
+        if profit_factor > 5.0:
+            pf_penalty = 0.4  # PF > 5 is unrealistic
+        elif profit_factor < 1.2:
+            pf_penalty = 0.7  # Too low edge
+        else:
+            pf_penalty = 1.0  # Realistic: 1.2-5.0
+        
+        # 3. Trade Count Penalty (prefer moderate activity)
+        if trades < 30:
             tc_penalty = 0.7  # Low sample
         elif trades > 300:
             tc_penalty = 0.6  # Overtrading
@@ -790,6 +834,20 @@ class HybridTrader:
                 
                 best_result = self.gpu.optimize(data)
                 
+                duration = time.time() - start
+                print(f"🧠 GPU: Optimization Complete in {duration:.2f}s | Best Score: {best_result['score']:.2f}")
+                
+                if best_result['score'] > -9000: # Valid result
+                    self.cpu.update_params(best_result)
+                    print("   [System Updated with New Parameters]\n")
+                
+            except queue.Empty:
+    print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
+    
+    # Use working capital from launcher
+    working_capital = WORKING_CAPITAL
+    print(f"💰 Working Capital: ${working_capital:.2f}")
+    print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
     print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
     print("="*50)
     
