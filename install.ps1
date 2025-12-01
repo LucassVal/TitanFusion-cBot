@@ -29,7 +29,7 @@ if (Test-Path $installDir) {
 
 # Create directory
 Write-Host "📁 Creating installation directory..." -ForegroundColor Green
-New-Item -ItemType Directory -Path $installPath -Force | Out-Null
+New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 
 # Download repository
 Write-Host "📥 Downloading Titan Pro from GitHub..." -ForegroundColor Green
@@ -51,7 +51,7 @@ Expand-Archive -Path $zipPath -DestinationPath "$env:TEMP\TitanProExtract" -Forc
 
 # Move files
 $extractedFolder = Get-ChildItem "$env:TEMP\TitanProExtract" | Select-Object -First 1
-Copy-Item "$($extractedFolder.FullName)\*" -Destination $installPath -Recurse -Force
+Copy-Item "$($extractedFolder.FullName)\*" -Destination $installDir -Recurse -Force
 
 # Cleanup
 Remove-Item $zipPath -Force
@@ -62,12 +62,12 @@ Write-Host "══════════════════════�
 Write-Host "   ✅ INSTALLATION COMPLETE!" -ForegroundColor Green
 Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "📍 Installed at: $installPath" -ForegroundColor Yellow
+Write-Host "📍 Installed at: $installDir" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "📋 Next Steps:" -ForegroundColor Cyan
 Write-Host "   1. Install Python 3.12: https://www.python.org/downloads/"
 Write-Host "   2. Install dependencies:"
-Write-Host "      cd '$installPath\Titan pro'"
+Write-Host "      cd '$installDir\Titan pro'"
 Write-Host "      pip install pandas pandas_ta numpy pyopencl websockets"
 Write-Host ""
 Write-Host "   3. Run Titan Pro:"
@@ -79,7 +79,7 @@ Write-Host ""
 # Ask to open folder
 $openFolder = Read-Host "Open installation folder? (y/n)"
 if ($openFolder -eq 'y') {
-    explorer $installPath
+    explorer $installDir
 }
 
 # Ask to create desktop shortcut
@@ -88,8 +88,8 @@ if ($createShortcut -eq 'y') {
     $WshShell = New-Object -comObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Titan Pro.lnk")
     $Shortcut.TargetPath = "python.exe"
-    $Shortcut.Arguments = "`"$installPath\Titan pro\launcher.py`""
-    $Shortcut.WorkingDirectory = "$installPath\Titan pro"
+    $Shortcut.Arguments = "`"$installDir\Titan pro\launcher.py`""
+    $Shortcut.WorkingDirectory = "$installDir\Titan pro"
     $Shortcut.IconLocation = "python.exe"
     $Shortcut.Description = "Titan Pro Trading System"
     $Shortcut.Save()
@@ -98,5 +98,5 @@ if ($createShortcut -eq 'y') {
 }
 
 Write-Host ""
-Write-Host "🎉 Ready to trade! Launch with: python '$installPath\Titan pro\launcher.py'" -ForegroundColor Yellow
+Write-Host "🎉 Ready to trade! Launch with: python '$installDir\Titan pro\launcher.py'" -ForegroundColor Yellow
 Write-Host ""
