@@ -842,20 +842,6 @@ class HybridTrader:
                     print("   [System Updated with New Parameters]\n")
                 
             except queue.Empty:
-                continue
-            except Exception as e:
-                print(f"GPU Error: {e}")
-
-# =============================================================================
-# LIVE TRADING LOOP (Deriv API)
-# =============================================================================
-def run_live_trading():
-    from deriv_client import DerivClient
-    
-    # Set console title
-    os.system(f'title Titan Pro {VERSION} - Live Trading')
-    
-    print("="*50)
     print(f"TITAN PRO v{VERSION} - LIVE HYBRID TRADING")
     print("="*50)
     print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
