@@ -842,20 +842,23 @@ class HybridTrader:
                     print("   [System Updated with New Parameters]\n")
                 
             except queue.Empty:
-    print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
-    
-    # Use working capital from launcher
-    working_capital = WORKING_CAPITAL
-    print(f"💰 Working Capital: ${working_capital:.2f}")
-    print(f"🎯 Risk: {RISK_PER_TRADE*100:.1f}% per trade")
-    print(f"🏆 Daily Goal: ${DAILY_PROFIT_GOAL:.2f} | Max Loss: ${MAX_DAILY_LOSS:.2f}")
-    print("="*50)
-    
-    # Initialize trader with working capital
-    trader = HybridTrader(initial_balance=working_capital)
-    trader.initialize_with_history()  # Pre-flight check
+                continue
+            except Exception as e:
+                print(f"GPU Error: {e}")
 
-    client = DerivClient(token=API_TOKEN)
+# =============================================================================
+# LIVE TRADING LOOP (Deriv API)
+# =============================================================================
+def run_live_trading():
+    from deriv_client import DerivClient
+    
+    # Set console title
+    os.system(f'title Titan Pro {VERSION} - Live Trading')
+    
+    print("="*50)
+    print(f"TITAN PRO v{VERSION} - LIVE HYBRID TRADING")
+    print("="*50)
+    print(f"⏰ Timeframe: {SELECTED_TIMEFRAME}")
     
     # M1 -> M15 Aggregator State
     m1_buffer = []
