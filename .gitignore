@@ -1,0 +1,82 @@
+# ══════════════════════════════════════════════════════════════════
+# Titan Fusion Quantum - .gitignore
+# ══════════════════════════════════════════════════════════════════
+
+# ═══ SECURITY - API KEYS & CREDENTIALS ═══
+config.py
+*.env
+.env
+.env.local
+secrets.json
+api_keys.txt
+
+# ═══ DATA & LOGS ═══
+data/
+*.json
+*.log
+*.csv
+*.txt
+!requirements.txt
+!README*.txt
+
+# ═══ PYTHON ═══
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ═══ VIRTUAL ENVIRONMENTS ═══
+venv/
+ENV/
+env/
+.venv
+
+# ═══ IDE ═══
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ═══ CTRADER ═══
+*.algo
+*.dll
+*.pdb
+bin/
+obj/
+
+# ═══ BACKUPS ═══
+*.bak
+*.backup
+*.old
+_archive/
+
+# ═══ TEMP FILES ═══
+*.tmp
+*.temp
+temp/
+tmp/
+
+# ══════════════════════════════════════════════════════════════════
+# KEEP THESE FILES (Negations)
+# ══════════════════════════════════════════════════════════════════
+!config.example.py
+!.gitignore
+!.version
