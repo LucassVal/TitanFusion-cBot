@@ -554,12 +554,15 @@ def load_market_data_from_ctrader(symbol):
         
         # Metadata (Asset DNA)
         metadata = data.get('symbol_metadata', {})
+        
+        # Bot Config (Max Positions, Auto Trade, etc)
+        bot_config = data.get('bot_status', {})
 
-        return data_dict, current_price, sentiment, active_pos, metadata
+        return data_dict, current_price, sentiment, active_pos, metadata, bot_config
 
     except Exception as e:
         print(f"❌ Error reading data from {symbol}: {e}")
-        return None, 0.0
+        return None, 0.0, None, [], {}, {}
 
 # =============================================================================
 # 3. A INTELIGÊNCIA (Gemini Flash 2.0 - Antigravity)
@@ -869,7 +872,8 @@ if __name__ == "__main__":
                 ok_l3 = False # AI Brain
                 ok_l4 = False # Order Mgmt
                 
-                data_dict, price, sentiment, active_pos, metadata = load_market_data_from_ctrader(symbol)
+                # Unpack new return value
+                data_dict, price, sentiment, active_pos, metadata, bot_config = load_market_data_from_ctrader(symbol)
                 
                 if data_dict:
                     print(f"\n  🔍 ANALYZING {symbol}:")
@@ -918,7 +922,8 @@ if __name__ == "__main__":
                         print(f"     Entry: {entry_raw:.5f} | SL: {sl_raw:.5f} | TP: {tp_raw:.5f}")
                         
                         # Check Max Positions
-                        if len(active_pos) >= 3:
+                        max_pos = bot_config.get('max_positions', 5) # Default to 5 (Screenshot)
+                        if len(active_pos) >= max_pos:
                              log_rejected_signal(symbol, "MAX_POSITIONS", decisao.get('confidence',0), decisao.get('direction','N/A'))
                              print(f"    [L3 Decision] ⚠️ AUTO-TRADE BLOCKED: Max Positions ({len(active_pos)}) reached.")
                              print(f"                  -> Execute MANUALLY if you have funds.")
@@ -942,8 +947,9 @@ if __name__ == "__main__":
             # Full Portfolio (Opportunity Mode): 180s (3 min) to save tokens
             current_interval = SCAN_INTERVAL
             for symbol in active_symbols:
-                _, _, _, active_pos, _ = load_market_data_from_ctrader(symbol)
-                if len(active_pos) >= 3:
+                _, _, _, active_pos, _, bot_config = load_market_data_from_ctrader(symbol)
+                max_pos = bot_config.get('max_positions', 5)
+                if len(active_pos) >= max_pos:
                     current_interval = 180 # 3 minutes
                     print(f"  [OPPORTUNITY MODE] 🐢 Slowing down scan to {current_interval}s (Portfolio Full)")
                     break
