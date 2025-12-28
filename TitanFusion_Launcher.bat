@@ -7,16 +7,16 @@ echo =======================================================
 echo    TITAN FUSION QUANTUM - ANTIGRAVITY ENGINE v3.0
 echo =======================================================
 echo.
-echo  [1] Verificando integridade do sistema...
+echo  [1] Verifying system integrity...
 if exist "quantum_brain.py" (
-    echo  [OK] Cérebro detectado.
+    echo  [OK] Brain detected.
 ) else (
-    echo  [ERRO] quantum_brain.py não encontrado!
+    echo  [ERROR] quantum_brain.py not found!
     pause
     exit
 )
 echo.
-echo  [2] Iniciando Antigravity Engine...
+echo  [2] Starting Antigravity Engine...
 echo.
 python quantum_brain.py
 pause

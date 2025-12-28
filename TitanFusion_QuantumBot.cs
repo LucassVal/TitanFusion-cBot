@@ -1014,6 +1014,85 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
         }
         #endregion
 
+        #region L4 Supervisor Commands
+        /// <summary>
+        /// L4 SUPERVISOR: Process automated SL/TP adjustments from Python brain.
+        /// CRITICAL: ClosePosition is INTENTIONALLY NOT IMPLEMENTED for safety.
+        /// </summary>
+        private void ProcessL4Commands()
+        {
+            try
+            {
+                string cmdPath = Path.Combine(_dataFolder, "position_commands.json");
+                if (!File.Exists(cmdPath)) return;
+                
+                string json = File.ReadAllText(cmdPath);
+                var commands = JsonSerializer.Deserialize<L4Command[]>(json);
+                if (commands == null || commands.Length == 0) return;
+                
+                Print($"[L4 SUPERVISOR] Processing {commands.Length} commands...");
+                
+                foreach (var cmd in commands)
+                {
+                    var position = Positions.FirstOrDefault(p => p.Id == cmd.position_id);
+                    if (position == null)
+                    {
+                        Print($"[L4] Position {cmd.position_id} not found, skipping");
+                        continue;
+                    }
+                    
+                    // Get symbol info for decimal precision
+                    var symbolInfo = Symbols.GetSymbol(position.SymbolName);
+                    int digits = symbolInfo?.Digits ?? 5;
+                    
+                    switch (cmd.action.ToUpper())
+                    {
+                        case "SET_SL":
+                            double newSL = Math.Round(cmd.value, digits);
+                            Print($"[L4] Setting SL for #{cmd.position_id} to {newSL} ({cmd.reason})");
+                            SafeModifyPosition(position, newSL, null, "L4_SUPERVISOR");
+                            break;
+                            
+                        case "SET_TP":
+                            double newTP = Math.Round(cmd.value, digits);
+                            Print($"[L4] Setting TP for #{cmd.position_id} to {newTP} ({cmd.reason})");
+                            SafeModifyPosition(position, null, newTP, "L4_SUPERVISOR");
+                            break;
+                            
+                        case "BREAKEVEN":
+                            double beLevel = Math.Round(position.EntryPrice, digits);
+                            Print($"[L4] Moving SL to breakeven for #{cmd.position_id} @ {beLevel}");
+                            SafeModifyPosition(position, beLevel, null, "L4_BREAKEVEN");
+                            break;
+                            
+                        // SAFETY: ClosePosition is INTENTIONALLY NOT IMPLEMENTED
+                        // case "CLOSE": - BLOCKED by design
+                        
+                        default:
+                            Print($"[L4] Unknown command: {cmd.action}");
+                            break;
+                    }
+                }
+                
+                // Delete file after processing
+                File.Delete(cmdPath);
+            }
+            catch (Exception ex)
+            {
+                Print($"[L4 ERROR] {ex.Message}");
+            }
+        }
+        
+        // JSON class for L4 commands
+        public class L4Command
+        {
+            public long position_id { get; set; }
+            public string action { get; set; }
+            public double value { get; set; }
+            public string reason { get; set; }
+        }
+        #endregion
+
         #region Legacy Trade Adoption
         private DateTime _lastLegacyCheck = DateTime.MinValue;
         
@@ -1208,19 +1287,24 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
                 if ((Server.Time - _lastExportTime).TotalSeconds < 10) return;
                 _lastExportTime = Server.Time;
 
-                // 1. Coletar posicoes abertas (para Portfolio Check)
-                // MODIFICADO: Exportar TODAS as posicoes do simbolo (Manual/Legacy/Bot)
-                var myPositions = Positions
-                    .Where(p => p.SymbolName == SymbolName)
+                // 1. Collect ALL open positions (L4 Supervisor needs global view)
+                // MODIFIED: Export ALL positions from ANY symbol for cross-asset monitoring
+                
+                var allPositions = Positions.ToList();
+                Print($"[L4 EXPORT] Total Positions: {allPositions.Count} (Global)");
+                
+                var globalPositions = allPositions
                     .Select(p => new 
                     {
                         id = p.Id,
-                        type = p.TradeType.ToString().ToUpper(), // BUY ou SELL (maiúsculas)
+                        symbol = p.SymbolName,  // CRITICAL: Include symbol for L4 cross-asset analysis
+                        type = p.TradeType.ToString().ToUpper(),
                         entry = p.EntryPrice,
-                        sl = p.StopLoss.HasValue ? p.StopLoss.Value : 0.0, // CRITICO: Exportar SL
-                        tp = p.TakeProfit.HasValue ? p.TakeProfit.Value : 0.0, // CRITICO: Exportar TP
+                        sl = p.StopLoss.HasValue ? p.StopLoss.Value : 0.0,
+                        tp = p.TakeProfit.HasValue ? p.TakeProfit.Value : 0.0,
                         pnl = p.NetProfit,
-                        strategy = p.Comment // Estratégia vem do comentário
+                        volume = p.VolumeInUnits,
+                        strategy = p.Comment ?? "MANUAL"
                     })
                     .ToArray();
 

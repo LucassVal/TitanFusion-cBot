@@ -4,7 +4,7 @@
 >
 > An institutional-grade trading engine that fuses **cTrader's** execution speed with **Python's** analytical power and **Gemini 2.0's** reasoning.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/LucassVal/TitanFusion-cBot/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/LucassVal/TitanFusion-cBot/releases)
 [![Engine](https://img.shields.io/badge/engine-Antigravity_v3-purple.svg)](https://ai.google.dev)
 [![Platform](https://img.shields.io/badge/platform-cTrader-orange.svg)](https://ctrader.com)
 
@@ -52,14 +52,21 @@ We calculate 10+ specific indices. Each one serves a critical role in validating
 *   **Prompt Engineering v3:** Uses a "Persona-based" prompt to act as an Institutional Trader.
 *   **Decision:** Determines the Strategy (*Scalp, Momentum, Swing*) and Confidence level. Only trades if Confidence > 75%.
 
-### **L4: Management & Integrity**
-*   **Portfolio Guard:** Prevents overexposure by limiting max 3 open positions per symbol.
-*   **Risk Guard:** Hard-coded limits on SL/TP (e.g., Max SL 0.3% for Scalp) that override AI hallucinations.
-*   **Supervisor:** A background process that validates the success of L1, L2, L3, and L4 every cycle.
+### **L4: Intelligent Order Supervisor (NEW in v1.3)**
+
+The L4 layer is no longer passive monitoring—it's an **Active Position Manager**:
+
+*   **Global Position View:** Monitors ALL open positions across ANY symbol.
+*   **Auto-Actions (Tight % Limits):**
+    *   `SET_SL`: Auto-adds emergency SL (0.3% from entry) when missing.
+    *   `BREAKEVEN`: Moves SL to entry when profit > 0.15%.
+    *   `SET_TP`: Adjusts TP to optimize R:R ratio.
+*   **Safety Rule:** `ClosePosition` is **INTENTIONALLY BLOCKED** in code—the system can adjust but NEVER close.
+*   **Integrity Check:** Validates L1, L2, L3, L4 every cycle.
 
 ---
 
-## 🚀 Key Features (v1.1)
+## 🚀 Key Features (v1.3)
 
 ### 📊 **Visual "War Room" Log**
 The terminal provides a military-grade dashboard of what the bot is thinking:
@@ -68,10 +75,16 @@ The terminal provides a military-grade dashboard of what the bot is thinking:
     [L1 DNA]       Digits: 2 | Pip: 0.01 | MinVol: 1
     [L1 Scan]      Pattern Status (13/13):
       - M5 : [S:🟢 F:🔴 C:__ W:__ ...]
+    [L1+ Structure] Trend: STRONG_BULLISH 🚀 | Momentum: OVERBOUGHT ⚠️
     [L2 Sentiment] 🚨 DIVERGENCE: Crowd Extreme Buying -> Look for SELL
-    [L3 Decision]  ⛔ WAIT (Scalp) | Conf: 60% | Reason: H4 trend conflict
-    [L4 Mgmt]      Monitoring 2 orders | 🟢 In Profit
-  [INTEGRITY] ✅ CYCLE VALIDATED (L1,L2,L3,L4 OK) | Latency: 0.85s
+    
+    [L4 ORDER SUPERVISOR] Analyzing 2 positions...
+      [XAUUSD] Order #12345 | SELL | PnL: $-1.50 🔴
+        Entry: 2650.00 | SL: 0.00000 | TP: 2640.00
+        ⚠️ ALERT: NO SL! Auto-setting emergency SL at 2657.95 (0.3%)
+    [L4] 📤 Sent 1 command to cBot
+    
+  [INTEGRITY] ✅ CYCLE VALIDATED (L1,L2,L3,L4 OK) | Latency: 2.54s
 ```
 
 ###  dziennik **Journaling System**

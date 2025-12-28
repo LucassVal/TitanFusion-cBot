@@ -49,8 +49,8 @@ def validate_and_cap_targets(strategy_name, sl_val, tp_val, entry_price, symbol)
     warnings = []
     capped = False
     
-    # Corrigir SL excessivo
-    if sl_pct > max_sl_pct:
+    # Corrigir SL excessivo (STRICTLY greater, not equal)
+    if sl_pct > max_sl_pct + 0.01:  # Small tolerance for floating point
         warnings.append(f"⚠️ SL MUITO GRANDE! {sl_pct:.2f}% (limite: {max_sl_pct}%)")
         # Determinar direção do trade
         if entry_price > sl_val:  # SELL trade
@@ -60,8 +60,8 @@ def validate_and_cap_targets(strategy_name, sl_val, tp_val, entry_price, symbol)
         capped = True
         print(f"  🔧 [AUTO-CORREÇÃO] SL ajustado para {max_sl_pct}% do preço")
     
-    # Corrigir TP excessivo
-    if tp_pct > max_tp_pct:
+    # Corrigir TP excessivo (STRICTLY greater, not equal)
+    if tp_pct > max_tp_pct + 0.01:  # Small tolerance for floating point
         warnings.append(f"⚠️ TP MUITO GRANDE! {tp_pct:.2f}% (limite: {max_tp_pct}%)")
         # Determinar direção do trade
         if entry_price < tp_val:  # BUY trade

@@ -15,13 +15,18 @@ from datetime import datetime
 from tp_sl_validator import validate_and_cap_targets
 
 # --- CONFIGURAÇÃO ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_API_KEY_HERE")
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCWyaHwLI3zeUsKNJlSmiHt3dA4Nz88Hzw")
+# Remover URL fixa, vamos usar dinâmica
+# GEMINI_URL = ...
 
 # Caminhos (Titan Fusion Quantum)
 DATA_FOLDER = r"C:\Users\Lucas Valério\Documents\TitanFusionAI"
 SCAN_INTERVAL = 30 # Segundos entre análises
 CONFIDENCE_THRESHOLD = 75 # Só opera se IA tiver 75%+ de certeza
+
+# Signal Duplicate Prevention Cache
+# Format: {"SYMBOL": {"direction": "BUY", "timestamp": datetime}}
+LAST_SIGNALS = {}
 
 # =============================================================================
 # 1. MOTOR DE ANÁLISE TÉCNICA (O "QUANT SCANNER")
@@ -118,6 +123,23 @@ def detectar_padroes_institucionais(df, tf_name):
         reversion_short = False
         reversion_long = False
 
+    # 11. INSIDE BAR (Consolidation)
+    inside_bar = (curr['High'] < prev['High']) and (curr['Low'] > prev['Low'])
+
+    # 12. PINBAR (Hammer/Shooting Star)
+    # Pavio condizente com reversão
+    upper_shadow = curr['High'] - max(curr['Close'], curr['Open'])
+    lower_shadow = min(curr['Close'], curr['Open']) - curr['Low']
+    body = abs(curr['Close'] - curr['Open'])
+    
+    pinbar_bull = (lower_shadow > 2 * body) and (upper_shadow < body)
+    pinbar_bear = (upper_shadow > 2 * body) and (lower_shadow < body)
+
+    # 13. THREE SOLDIERS (Momentum Continuation)
+    # 3 velas da mesma cor sequenciais
+    bull_3 = (curr['Close'] > curr['Open']) and (prev['Close'] > prev['Open']) and (df.iloc[-3]['Close'] > df.iloc[-3]['Open'])
+    bear_3 = (curr['Close'] < curr['Open']) and (prev['Close'] < prev['Open']) and (df.iloc[-3]['Close'] < df.iloc[-3]['Open'])
+
     # Retorna o Relatório Deste Timeframe
     return {
         "TF": tf_name,
@@ -129,9 +151,12 @@ def detectar_padroes_institucionais(df, tf_name):
         "A_ORDER_BLOCK": "BULL" if ob_bull else "BEAR" if ob_bear else None,
         "A_ABSORPTION": absorption,
         "A_BREAKOUT": "BULL" if breakout_bull else "BEAR" if breakout_bear else None,
+        "A_MOMENTUM_3": "BULL" if bull_3 else "BEAR" if bear_3 else None,
         "B_PULLBACK": "BULL" if pullback_bull else "BEAR" if pullback_bear else None,
         "B_ENGULFING": "BULL" if engulfing_bull else "BEAR" if engulfing_bear else None,
-        "B_REVERSION": "LONG" if reversion_long else "SHORT" if reversion_short else None
+        "B_REVERSION": "LONG" if reversion_long else "SHORT" if reversion_short else None,
+        "B_INSIDE_BAR": inside_bar,
+        "B_PINBAR": "BULL" if pinbar_bull else "BEAR" if pinbar_bear else None
     }
 
 # =============================================================================
@@ -247,7 +272,7 @@ def print_detailed_matrix(matrix, metadata):
     print("    [L1 Scan]      Pattern Status (13/13):")
     
     # S=Sweep, F=FVG, C=Choch, W=Wyckoff, OB=OrderBlock, Ab=Absorp, Br=Breakout
-    # P=Pullback, E=Engulf, R=Reversion
+    # P=Pullback, E=Engulf, R=Reversion, I=Inside, Pi=Pinbar, 3S=3Soldiers
     
     tfs = ['M5', 'M15', 'M30', 'H1', 'H4']
     for tf in tfs:
@@ -272,35 +297,127 @@ def print_detailed_matrix(matrix, metadata):
                 f"Br:{fmt(d.get('A_BREAKOUT'))} "
                 f"P:{fmt(d.get('B_PULLBACK'))} "
                 f"E:{fmt(d.get('B_ENGULFING'))} "
-                f"R:{fmt(d.get('B_REVERSION'))}"
+                f"R:{fmt(d.get('B_REVERSION'))} "
+                f"I:{fmt(d.get('B_INSIDE_BAR'))} "
+                f"Pi:{fmt(d.get('B_PINBAR'))} "
+                f"3S:{fmt(d.get('A_MOMENTUM_3'))}"
             )
             print(f"      - {tf:<3}: [{line}]")
+    
+    # L1+ Structure Log (Show Trend/Momentum/Volatility from H1)
+    h1_structure = matrix.get('H1', {}).get('STRUCTURE', {})
+    if h1_structure:
+        print(f"    [L1+ Structure] Trend: {h1_structure.get('trend_desc', 'N/A')} | "
+              f"Momentum: {h1_structure.get('momentum_desc', 'N/A')} | "
+              f"Volatility: {h1_structure.get('vol_desc', 'N/A')} | "
+              f"Flow: {h1_structure.get('flow_desc', 'N/A')}")
 
-def analyze_active_orders(active_pos, current_price):
-    """Analyzes and prints active order status"""
-    if not active_pos:
+# =============================================================================
+# L4 SUPERVISOR - INTELLIGENT ORDER MANAGEMENT
+# =============================================================================
+
+# L4 uses TIGHT % limits (minimize loss, secure quick profit)
+L4_EMERGENCY_SL_PCT = 0.3  # 0.3% max risk for emergency SL
+L4_BREAKEVEN_THRESHOLD_PCT = 0.15  # Move to BE when profit > 0.15%
+
+def is_sl_improvement(current_sl, new_sl, entry, direction):
+    """Returns True only if new_sl is better (closer to entry or equal)."""
+    if current_sl == 0:
+        return True  # Any SL is better than no SL
+    
+    if direction == "BUY":
+        # For BUY: SL should increase (get closer to entry from below)
+        return new_sl >= current_sl and new_sl <= entry
+    else:
+        # For SELL: SL should decrease (get closer to entry from above)
+        return new_sl <= current_sl and new_sl >= entry
+
+def calculate_emergency_sl(entry, direction, risk_pct=L4_EMERGENCY_SL_PCT):
+    """Calculate emergency SL based on percentage (TIGHT - minimize loss)."""
+    if direction == "BUY":
+        return entry * (1 - risk_pct / 100)
+    else:
+        return entry * (1 + risk_pct / 100)
+
+def l4_supervisor(active_positions, data_folder):
+    """
+    L4 SUPERVISOR: Intelligent position manager.
+    - Analyzes each position independently
+    - Auto-adjusts SL/TP using TIGHT % limits
+    - NEVER closes positions (safety rule)
+    """
+    if not active_positions:
         print("    [L4 Mgmt]      No open orders.")
-        return
-
-    print(f"    [L4 Mgmt]      Monitoring {len(active_pos)} orders:")
-    for pos in active_pos:
-        # Conversão segura
+        return []
+    
+    print(f"\n    [L4 ORDER SUPERVISOR] Analyzing {len(active_positions)} positions...")
+    commands = []
+    
+    for pos in active_positions:
+        pos_id = pos.get('id', 0)
+        symbol = pos.get('symbol', 'UNKNOWN')
+        direction = pos.get('type', 'BUY')
         entry = float(pos.get('entry', 0))
         sl = float(pos.get('sl', 0))
         tp = float(pos.get('tp', 0))
         pnl = float(pos.get('pnl', 0))
-        typ = pos.get('type', '?')
         
-        # Distância p/ SL e TP
-        dist_sl = abs(current_price - sl) if sl > 0 else 0
-        dist_tp = abs(tp - current_price) if tp > 0 else 0
+        # Calculate profit % relative to entry
+        profit_pct = (pnl / (entry * 100)) * 100 if entry > 0 else 0
         
-        # Status
-        status_msg = "🟢 In Profit" if pnl > 0 else "🔴 At Risk"
-        if sl > 0 and dist_sl < (entry * 0.001): status_msg += " (DANGER: SL Near!)"
+        # Status indicator
+        status = "🟢" if pnl > 0 else "🔴"
         
-        print(f"      > #{pos.get('id')} {typ} | PnL: ${pnl:.2f} | {status_msg}")
-        print(f"        SL: {sl:.5f} | TP: {tp:.5f}")
+        print(f"      [{symbol}] Order #{pos_id} | {direction} | PnL: ${pnl:.2f} {status}")
+        print(f"        Entry: {entry:.5f} | SL: {sl:.5f} | TP: {tp:.5f}")
+        
+        # === SMART ALERTS & AUTO-ACTIONS ===
+        
+        # 1. EMERGENCY: Missing SL (CRITICAL RISK)
+        if sl == 0:
+            emergency_sl = calculate_emergency_sl(entry, direction)
+            print(f"        ⚠️ ALERT: NO SL! Auto-setting emergency SL at {emergency_sl:.5f} ({L4_EMERGENCY_SL_PCT}%)")
+            commands.append({
+                "position_id": pos_id,
+                "action": "SET_SL",
+                "value": emergency_sl,
+                "reason": f"Emergency SL ({L4_EMERGENCY_SL_PCT}% from entry)"
+            })
+        
+        # 2. BREAKEVEN: Lock profit when threshold reached
+        elif pnl > 0 and profit_pct >= L4_BREAKEVEN_THRESHOLD_PCT:
+            # Check if SL is not already at or better than entry
+            should_move = False
+            if direction == "BUY" and sl < entry:
+                should_move = True
+            elif direction == "SELL" and sl > entry:
+                should_move = True
+            
+            if should_move:
+                print(f"        💡 ACTION: Moving SL to breakeven @ {entry:.5f} (profit {profit_pct:.2f}%)")
+                commands.append({
+                    "position_id": pos_id,
+                    "action": "BREAKEVEN",
+                    "value": entry,
+                    "reason": f"Lock profit at breakeven ({profit_pct:.2f}%)"
+                })
+        
+        # 3. DANGER: Price approaching SL
+        elif sl > 0:
+            current_price = entry  # Simplified, should get from market data
+            sl_distance_pct = abs(current_price - sl) / entry * 100
+            if sl_distance_pct < 0.05:  # Within 0.05% of SL
+                print(f"        🚨 DANGER: Price {sl_distance_pct:.3f}% from SL!")
+    
+    # Write commands to JSON for cBot to execute
+    if commands:
+        cmd_path = os.path.join(data_folder, "position_commands.json")
+        with open(cmd_path, "w") as f:
+            json.dump(commands, f, indent=2)
+        print(f"    [L4] 📤 Sent {len(commands)} commands to cBot")
+    
+    return commands
+
 
 # =============================================================================
 # 1.1 UTILS: JOURNALING & CLEANUP
@@ -474,20 +591,29 @@ Key Metrics: {structure_h1.get('indicators', {})}
 Active Patterns (Multi-Timeframe):
 {report_txt}
 
->>> TRADING MODES <<<
-1. FAST SCALP (M5): Pure price action. Requires 'Liquidity Sweep' or 'Reversion'.
-2. SCALP (M15): Structural scalp. Requires M15 structure break.
-3. MOMENTUM (M30/H1): Requires 'Order Block' + 'Trend Alignment'.
-4. SWING (H4): Requires 'CHoCH' OR 'Wyckoff Spring' on H4.
+>>> TRADING MODES & INDICATOR WEIGHTING (DYNAMIC) <<<
+1. FAST SCALP (M5):
+   - FOCUS: Stochastics, Williams%R, Bollinger Squeeze.
+   - IGNORE: Triple EMA (Trend takes too long to form).
+   - GOAL: Quick captures (<15 min).
 
->>> CRITICAL RULES (DO NOT IGNORE) <<<
-1. SENTIMENT RULE (CONTRARIAN):
-   - IF Crowd Buy% > 75%: DO NOT BUY. Information indicates 'Overbought'. Look for SELL patterns (Wyckoff/Sweep).
-   - IF Crowd Buy% < 25%: DO NOT SELL. Information indicates 'Oversold'. Look for BUY patterns.
-   - DIVERGENCE (Price vs Sentiment) is a Tier S signal.
+2. MOMENTUM (H1):
+   - FOCUS: MACD, OBV, Flow Score, Triple EMA.
+   - IGNORE: RSI (RSI > 70 is GOOD in momentum).
+   - GOAL: Ride the wave.
 
-2. CONFLUENCE IS KING: Never trade against H4 structure unless looking for a Fast Scalp Reversion.
-3. TIER S > TIER B: A 'Liquidity Sweep' is 3x more powerful than an 'Engulfing'.
+3. SWING (H4):
+   - FOCUS: Structure (CHoCH), Volume Profile, Fundamental Bias.
+   - GOAL: Major moves.
+
+>>> CRITICAL RULES (Smart Filtering) <<<
+1. **Context is King:** Do NOT demand 10/10 indicators green.
+   - If Trend = STRONG_BULLISH, *ignore* "Overbought" oscillators. BUY dips.
+   - If Volatility = SQUEEZE, expect a Breakout (ignore mean reversion).
+2. **Sentiment Rule:**
+   - If Crowd Buy > 75% -> Blocks BUYs (unless Scalp sell).
+   - If Crowd Buy < 25% -> Blocks SELLs (unless Scalp buy).
+3. **Quality > Quantity:** Better 1 perfect trade than 5 risky ones.
 4. RISK MANAGEMENT (These are HARD LIMITS): 
    - FAST SCALP: Max SL 0.15% | TP 0.25%
    - SCALP: Max SL 0.30% | TP 0.50%
@@ -507,40 +633,95 @@ Active Patterns (Multi-Timeframe):
 }}
     """
 
+    # Prepare prompt payload
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.2}
     }
 
-    try:
-        # print("🧠 Antigravity: Consulting Matrix...")
-        response = requests.post(GEMINI_URL, json=payload, timeout=20)
-        if response.status_code != 200: return None
+    # Lista de Modelos para tentar (Fallback System)
+    models_to_try = [
+        "gemini-2.0-flash-exp",    # 🏆 WINNER (Confirmed via Debug)
+        "gemini-3-flash-preview",  # Experimental (User Request)
+        "gemini-1.5-flash-latest", 
+        "gemini-pro"
+    ]
+    
+    for model in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
         
-        txt = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        txt = txt.replace("```json", "").replace("```", "").strip()
-        return json.loads(txt)
-    except Exception as e:
-        print(f"    [L3 Decision]  ❌ GEMINI CONNECTION ERROR:")
-        print(f"                   Status: {getattr(e.response, 'status_code', 'N/A') if hasattr(e, 'response') else 'N/A'}")
-        print(f"                   Detail: {str(e)[:200]}") # Trunca erro longo
-        return None
+        # PERSISTENCE LAYER: 3 Retries per Model
+        for attempt in range(1, 4):
+            try:
+                # print(f"    [L3 AI] Connecting to {model} (Attempt {attempt}/3)...")
+                response = requests.post(url, json=payload, timeout=25) # Aumentei timeout
+                
+                if response.status_code == 200:
+                    # SUCESSO REAL!
+                    txt = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    txt = txt.replace("```json", "").replace("```", "").strip()
+                    # print(f"    [L3 AI] ✅ Connected to {model}!")
+                    return json.loads(txt)
+                
+                elif response.status_code == 404:
+                    # Modelo incorreto, não adianta tentar de novo
+                    print(f"    [L3 Debug] ⚠️ Model {model} not found (404). Skipping.")
+                    break # Sai do retry loop, vai pro proximo modelo
+                
+                elif response.status_code == 429:
+                    # Rate Limit, esperar e tentar de novo
+                    print(f"    [L3 Debug] ⏳ Rate Limit ({model}). Retrying in 2s...")
+                    time.sleep(2)
+                    continue
+                
+                else:
+                    # Erro genérico
+                    print(f"    [L3 Debug] ❌ Error {response.status_code} on {model}: {response.text[:100]}")
+                    # Tenta de novo se for 500/503, senão break? Vamos tentar.
+                    time.sleep(1)
+                    continue
+
+            except Exception as e:
+                # Erro de Conexão (Timeout, DNS, SSL)
+                print(f"    [L3 Debug] 🔌 Connection Failed ({model}): {str(e)[:100]}")
+                time.sleep(1)
+                continue
+            
+    # Se chegou aqui, falhou TUDO (4 modelos x 3 tentativas = 12 failures)
+    print(f"    [L3 Decision]  ❌ FATAL: AI Connection Lost. Checked {len(models_to_try)} models.")
+    return None
 
 # =============================================================================
 # 4. PONTE COM CTRADER (JSON Bridge)
 # =============================================================================
 
 def escrever_sinal(decisao, symbol):
+    global LAST_SIGNALS
+    
     # Validar Confiança
     action = decisao.get('action', 'WAIT')
     conf = decisao.get('confidence', 0)
     strat = decisao.get('strategy', 'N/A')
     reason = decisao.get('reason', '')
+    direction = decisao.get('direction', 'WAIT')
     
     if action != 'APPROVE' or conf < CONFIDENCE_THRESHOLD:
         print(f"    [L3 Decision]  ⛔ {action} ({strat}) | Conf: {conf}%")
         print(f"                   Reason: {reason}")
         return
+    
+    # --- DUPLICATE SIGNAL PREVENTION ---
+    # Block same direction for same symbol within 5 minutes
+    COOLDOWN_MINUTES = 5
+    if symbol in LAST_SIGNALS:
+        last = LAST_SIGNALS[symbol]
+        elapsed = (datetime.now() - last['timestamp']).total_seconds() / 60
+        if last['direction'] == direction and elapsed < COOLDOWN_MINUTES:
+            print(f"    [L3 Decision]  ⏸️ DUPLICATE BLOCKED ({direction} already sent {elapsed:.1f} min ago)")
+            return
+    
+    # Update cache
+    LAST_SIGNALS[symbol] = {'direction': direction, 'timestamp': datetime.now()}
 
     # --- CAMADA DE SEGURANÇA (RISK GUARD) ---
     # Impõe os limites matemáticos rígidos, independente da "opinião" da IA
@@ -657,8 +838,9 @@ if __name__ == "__main__":
                     if sentiment: ok_l2 = True
                     decisao = consultar_gemini_antigravity(matrix_analise, price, symbol, sentiment)
                     
-                    # LOG L4: Gestão de Ordens
-                    analyze_active_orders(active_pos, price)
+                    
+                    # L4 SUPERVISOR: Intelligent Order Management
+                    l4_supervisor(active_pos, DATA_FOLDER)
                     ok_l4 = True
                     
                     # 4. Execução (com Validação)
