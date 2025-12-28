@@ -1209,8 +1209,9 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
                 _lastExportTime = Server.Time;
 
                 // 1. Coletar posicoes abertas (para Portfolio Check)
+                // MODIFICADO: Exportar TODAS as posicoes do simbolo (Manual/Legacy/Bot)
                 var myPositions = Positions
-                    .Where(p => p.SymbolName == SymbolName && p.Label == BOT_LABEL)
+                    .Where(p => p.SymbolName == SymbolName)
                     .Select(p => new 
                     {
                         id = p.Id,
