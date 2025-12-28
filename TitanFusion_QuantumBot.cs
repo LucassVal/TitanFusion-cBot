@@ -32,7 +32,7 @@ namespace cAlgo.Robots
         [Parameter("Min Confidence %", DefaultValue = 75, MinValue = 50, MaxValue = 100)]
         public int MinConfidence { get; set; }
         
-        [Parameter("Max Open Positions", DefaultValue = 5, MinValue = 1, MaxValue = 20)]
+        [Parameter("Max Open Positions", DefaultValue = 3, MinValue = 1, MaxValue = 50)]
         public int MaxPositions { get; set; }
         #endregion
 
@@ -46,19 +46,19 @@ namespace cAlgo.Robots
         [Parameter("Risk Per Trade % (Auto)", DefaultValue = 1.0, MinValue = 0.1, MaxValue = 5)]
         public double RiskPercent { get; set; }
         
-        [Parameter("Fixed Lots (Manual)", DefaultValue = 800, MinValue = 0.01, MaxValue = 1000000.0)]
+        [Parameter("Fixed Lots (Manual)", DefaultValue = 0.01, MinValue = 0.01, MaxValue = 100000.0)]
         public double FixedLots { get; set; }
         
-        [Parameter("Max Total Lots", DefaultValue = 800, MinValue = 0.01, MaxValue = 1000000.0)]
+        [Parameter("Max Total Lots", DefaultValue = 10.0, MinValue = 0.01, MaxValue = 100000.0)]
         public double MaxTotalLots { get; set; }
         
-        [Parameter("Max Daily Loss %", DefaultValue = 5.0, MinValue = 1, MaxValue = 20)]
+        [Parameter("Max Daily Loss %", DefaultValue = 5.0, MinValue = 1, MaxValue = 50)]
         public double MaxDailyLossPercent { get; set; }
         
-        [Parameter("Max Session Loss %", DefaultValue = 10.0, MinValue = 1, MaxValue = 30)]
+        [Parameter("Max Session Loss %", DefaultValue = 10.0, MinValue = 1, MaxValue = 50)]
         public double MaxSessionLossPercent { get; set; }
         
-        [Parameter("Max Trades Per Day", DefaultValue = 50, MinValue = 1, MaxValue = 100)]
+        [Parameter("Max Trades Per Day", DefaultValue = 20, MinValue = 1, MaxValue = 200)]
         public int MaxDailyTrades { get; set; }
         #endregion
 
