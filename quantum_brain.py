@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import os
 import random
 from symbol_metadata_cache import load_or_create_metadata, get_gemini_context_string
+from tp_sl_validator import validate_and_cap_targets
 
 # =============================================================================
 # CONFIGURACAO
@@ -1377,56 +1378,59 @@ RESPONDA EM JSON (SEM MARKDOWN ou ```json):
             parsed = json.loads(ai_text[json_start:json_end])
             parsed["full_response"] = ai_text
             
-            # --- SANITY CHECK (Verificação de Sanidade) ---
-            # Respeita o Gemini, mas trava alucinações de preço
+            # --- SANITY CHECK & AUTO-CORRECTION (PERCENTUAL) ---
+            # Respeita limites conservadores definidos em tp_sl_validator.py
             try:
                 best_op = parsed.get("best_opportunity", {})
-                action = best_op.get("action", "").upper()
+                action = best_op.get("action", "").upper() # Or direction logic
+                strategy = best_op.get("strategy", "scalp")
+                
+                # Check if direction exists (sometimes it's directly in strategy or pattern?)
+                # The prompt asks for 'direction' in best_opportunity
+                
                 sl_ai = float(best_op.get("sl", 0))
                 tp1_ai = float(best_op.get("tp1", 0))
-                price_now = float(tecnico['price'])
+                price_now = float(tecnico.get('current_price', 0)) # Use current_price from tecnico
                 
                 if price_now > 0 and (sl_ai > 0 or tp1_ai > 0):
-                    # Definir limites de segurança (%)
-                    MAX_SL_PCT = 5.0
-                    MAX_TP_PCT = 12.0
+                    # CHAMAR VALIDATOR
+                    sl_corr, tp_corr, warnings = validate_and_cap_targets(
+                        strategy_name=strategy,
+                        sl_val=sl_ai,
+                        tp_val=tp1_ai,
+                        entry_price=price_now,
+                        symbol=symbol
+                    )
                     
-                    # Calcular distâncias atuais sugeridas pela IA
-                    dist_sl_pct = abs(price_now - sl_ai) / price_now * 100
-                    dist_tp_pct = abs(price_now - tp1_ai) / price_now * 100
+                    # Atualizar valores se corrigidos
+                    parsed["best_opportunity"]["sl"] = sl_corr
+                    parsed["best_opportunity"]["tp1"] = tp_corr
                     
-                    ajustou = False
-                    
-                    # 1. Verificar SL
-                    if dist_sl_pct > MAX_SL_PCT:
-                        print(f"  [SAFETY] SL da IA agressivo demais ({dist_sl_pct:.1f}%). Limitando a {MAX_SL_PCT}%.")
-                        if "BUY" in action:
-                            parsed["best_opportunity"]["sl"] = round(price_now * (1 - MAX_SL_PCT/100), 5)
-                        elif "SELL" in action:
-                            parsed["best_opportunity"]["sl"] = round(price_now * (1 + MAX_SL_PCT/100), 5)
-                        ajustou = True
-                            
-                    # 2. Verificar TP
-                    if dist_tp_pct > MAX_TP_PCT:
-                        print(f"  [SAFETY] TP da IA agressivo demais ({dist_tp_pct:.1f}%). Limitando a {MAX_TP_PCT}%.")
-                        if "BUY" in action:
-                            parsed["best_opportunity"]["tp1"] = round(price_now * (1 + MAX_TP_PCT/100), 5)
-                        elif "SELL" in action:
-                            parsed["best_opportunity"]["tp1"] = round(price_now * (1 - MAX_TP_PCT/100), 5)
-                        ajustou = True
+                    # Adicionar warnings ao log de risco
+                    if warnings:
+                        warn_msg = " | ".join(warnings)
+                        parsed["risk_warning"] = parsed.get("risk_warning", "") + "\n" + warn_msg
+                        print(f"  [RISK GUARD] {warn_msg}")
                         
-                    if ajustou:
-                        print(f"  [SAFETY] Novos Preços: SL={parsed['best_opportunity']['sl']} TP={parsed['best_opportunity']['tp1']}")
-                        
+
+                
+            
+            # --- SANITY CHECK PARA REVIEW DE POSIÇÕES ---
+            # Protege ordens abertas contra movimentos bruscos de SL/TP
+            
+            # --- SANITY CHECK PARA REVIEW DE POSIÇÕES ---
                 # --- SANITY CHECK PARA REVIEW DE POSIÇÕES ---
                 # Protege ordens abertas contra movimentos bruscos de SL/TP
+                MAX_SL_PCT = 5.0
+                MAX_TP_PCT = 12.0
+                
                 if "position_reviews" in parsed and isinstance(parsed["position_reviews"], list):
-                     # Criar mapa de posicoes por ID para lookup rapido
-                     positions_map = {}
-                     for pos in tecnico.get('open_positions', []):
-                         positions_map[pos.get('id')] = pos
-                     
-                     for review in parsed["position_reviews"]:
+                    # Criar mapa de posicoes por ID para lookup rapido
+                    positions_map = {}
+                    for pos in tecnico.get('open_positions', []):
+                        positions_map[pos.get('id')] = pos
+                    
+                    for review in parsed["position_reviews"]:
                         try:
                             # Ignorar review se for CLOSE_NOW (isso é outro fluxo)
                             if review.get("action") == "CLOSE_NOW": continue
