@@ -149,9 +149,9 @@ Each strategy with independent confidence scoring.
 
 ## Migration Notes
 
-### From Gold Emperor Quantum → Titan Fusion Quantum
+### From Legacy System → Titan Fusion Quantum
 
-If upgrading from the previous Gold Emperor system:
+If upgrading from the previous system:
 
 1. **Rename data folder:**
    - Old: `C:\Users\USERNAME\Documents\GoldEmperorAI`

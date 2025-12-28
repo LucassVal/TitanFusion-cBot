@@ -1,4 +1,4 @@
-# Gold Emperor QUANTUM - Enhanced with Win/Loss Tracking
+# TITAN FUSION QUANTUM - Enhanced with Win/Loss Tracking
 # Atomic writes + Signal expiration + Performance history
 
 import json
@@ -36,7 +36,7 @@ def ensure_folder():
 
 def detect_active_symbols():
     """
-    Detecta símbolos ativos escaneando subpastas em GoldEmperorAI/
+    Detecta símbolos ativos escaneando subpastas em TitanFusionAI/
     Retorna lista de símbolos que têm symbol_config.json válido
     
     COMPATIBILIDADE: Suporta formato antigo (arquivo na raiz) e novo (subfolders)

@@ -1,4 +1,4 @@
-# 🚀 Gold Emperor AI - Setup Guide
+# 🚀 Titan Fusion Quantum - Setup Guide
 
 ## ⚠️ SEGURANÇA PRIMEIRO!
 
@@ -60,7 +60,7 @@ python gemini_trader.py
 
 Você verá:
 ```
-🚀 Gold Emperor AI - Iniciando...
+🚀 Titan Fusion Quantum - Iniciando...
 📊 Símbolo: frxXAUUSD
 ⏱️  Intervalo: 30s
 ✅ Conectado à Deriv API

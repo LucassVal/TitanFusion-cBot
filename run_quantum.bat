@@ -2,7 +2,7 @@
 title QUANTUM BRAIN - MULTI SYMBOL
 color 0A
 echo ===================================================
-echo   GOLD EMPEROR QUANTUM - AI TRADING BRAIN
+echo   TITAN FUSION QUANTUM - AI TRADING BRAIN
 echo ===================================================
 echo.
 echo [1] Limpando cache Python...

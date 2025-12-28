@@ -150,7 +150,7 @@ namespace cAlgo.Robots
             BuildPanel();
             
             Print("═══════════════════════════════════════════════════");
-            Print("   GOLD EMPEROR QUANTUM BOT - AI Auto-Trader");
+            Print("   TITAN FUSION QUANTUM BOT - AI Auto-Trader");
             Print("═══════════════════════════════════════════════════");
             Print($"Symbol: {SymbolName}");
             Print($"Auto-Trade: {EnableAutoTrade}");
@@ -1179,7 +1179,7 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
         protected override void OnStop()
         {
             Print("═══════════════════════════════════════════════════");
-            Print("   GOLD EMPEROR QUANTUM BOT - Encerrado");
+            Print("   TITAN FUSION QUANTUM BOT - Encerrado");
             Print($"   Trades hoje: {_dailyTrades}");
             Print($"   P&L dia: ${Account.Balance - _dailyStartBalance:F2}");
             Print("═══════════════════════════════════════════════════");
