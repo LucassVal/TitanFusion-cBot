@@ -860,8 +860,25 @@ if __name__ == "__main__":
             time.sleep(SCAN_INTERVAL)
 
         except KeyboardInterrupt:
-            print("\n🛑 Sistema parado pelo usuário.")
+            print("\n🛑 System stopped by user.")
             break
         except Exception as e:
-            print(f"⚠️ Erro no loop principal: {e}")
+            print(f"⚠️ Main loop error: {e}")
             time.sleep(10)
+    
+    # ========================================
+    # ON-EXIT: Generate Validation Report
+    # ========================================
+    print("\n" + "=" * 50)
+    print("  📊 GENERATING SESSION VALIDATION REPORT...")
+    print("=" * 50)
+    
+    try:
+        from signal_validator import main as run_validator
+        run_validator()
+    except ImportError:
+        print("  ⚠️ Signal validator not found. Skipping report.")
+    except Exception as e:
+        print(f"  ⚠️ Validation error: {e}")
+    
+    print("\n✅ Session ended. Reports saved to TitanFusionAI/Reports/")
