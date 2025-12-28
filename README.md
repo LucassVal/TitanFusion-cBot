@@ -4,7 +4,7 @@
 >
 > An institutional-grade trading engine that fuses **cTrader's** execution speed with **Python's** analytical power and **Gemini 2.0's** reasoning.
 
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/LucassVal/TitanFusion-cBot/releases)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)](https://github.com/LucassVal/TitanFusion-cBot/releases)
 [![Engine](https://img.shields.io/badge/engine-Antigravity_v3-purple.svg)](https://ai.google.dev)
 [![Platform](https://img.shields.io/badge/platform-cTrader-orange.svg)](https://ctrader.com)
 
@@ -130,6 +130,30 @@ Overall Win Rate: 71.0%
 ### 3. Launch
 *   Use the **TitanFusion_Launcher.bat** included in the folder.
 *   Or use the Desktop Shortcut if created.
+
+---
+
+## 📊 Validation System (NEW in v1.3.2)
+
+Complete trade tracking for performance analysis:
+
+### Closed Positions Export
+When a position closes, cBot exports to `closed_positions.json`:
+*   **close_type**: `HIT_TP` | `HIT_SL` | `MANUAL` | `PROFIT_CLOSE` | `LOSS_CLOSE`
+*   Entry price, close price, PnL, strategy, volume
+
+### Rejected Signals Log
+Signals blocked due to portfolio limits are tracked in `rejected_signals.json`:
+*   Reason: `MAX_POSITIONS`, `LOW_CONFIDENCE`, `DUPLICATE`
+*   Timestamp, symbol, direction
+
+### Auto-Validation on Exit
+When you stop the engine (Ctrl+C), it automatically runs the Signal Validator:
+```
+📊 GENERATING SESSION VALIDATION REPORT...
+Strategy       | Signals | Wins | Losses | Win Rate
+FAST_SCALP     |   24    |  18  |   6    |   75% ✅
+```
 
 ---
 

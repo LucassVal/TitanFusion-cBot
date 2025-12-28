@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Linq;
+using System.Collections.Generic;
 using cAlgo.API;
 using cAlgo.API.Internals;
 
@@ -224,24 +225,32 @@ namespace cAlgo.Robots
                 };
                 
                 // Read existing, append, write
-                var existingList = new List<object>();
+                string jsonContent;
                 if (File.Exists(closedPath))
                 {
                     string existing = File.ReadAllText(closedPath);
-                    var arr = JsonSerializer.Deserialize<JsonElement[]>(existing);
-                    if (arr != null)
+                    // Simple approach: add to JSON array
+                    if (existing.TrimEnd().EndsWith("]"))
                     {
-                        foreach (var item in arr)
-                            existingList.Add(item);
+                        // Remove last ] and add new entry
+                        existing = existing.TrimEnd();
+                        existing = existing.Substring(0, existing.Length - 1);
+                        if (existing.TrimEnd().EndsWith("["))
+                            jsonContent = existing + JsonSerializer.Serialize(closedData) + "]";
+                        else
+                            jsonContent = existing + "," + JsonSerializer.Serialize(closedData) + "]";
+                    }
+                    else
+                    {
+                        jsonContent = "[" + JsonSerializer.Serialize(closedData) + "]";
                     }
                 }
-                existingList.Add(closedData);
+                else
+                {
+                    jsonContent = "[" + JsonSerializer.Serialize(closedData) + "]";
+                }
                 
-                // Keep only last 100 entries
-                if (existingList.Count > 100)
-                    existingList = existingList.Skip(existingList.Count - 100).ToList();
-                
-                File.WriteAllText(closedPath, JsonSerializer.Serialize(existingList, new JsonSerializerOptions { WriteIndented = true }));
+                File.WriteAllText(closedPath, jsonContent);
                 Print($"[VALIDATOR] Exported closed position #{pos.Id}: {closeType} PnL={pos.NetProfit:F2}");
             }
             catch (Exception ex)
