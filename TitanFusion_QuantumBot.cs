@@ -1308,12 +1308,12 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
                     })
                     .ToArray();
 
-                // 2. Coletar dados de Candles
+                // 2. Collect Candle data
                 var data = new
                 {
                     symbol = SymbolName,
                     current_price = Symbol.Bid,
-                    active_positions = myPositions,
+                    active_positions = globalPositions,  // L4 Supervisor: ALL positions globally
                     
                     // METADADOS DO SIMBOLO
                     symbol_metadata = new

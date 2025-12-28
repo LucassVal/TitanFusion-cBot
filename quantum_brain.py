@@ -19,10 +19,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCWyaHwLI3zeUsKNJlSmiHt3dA4Nz
 # Remover URL fixa, vamos usar dinâmica
 # GEMINI_URL = ...
 
-# Caminhos (Titan Fusion Quantum)
+# Paths (Titan Fusion Quantum)
 DATA_FOLDER = r"C:\Users\Lucas Valério\Documents\TitanFusionAI"
-SCAN_INTERVAL = 30 # Segundos entre análises
-CONFIDENCE_THRESHOLD = 75 # Só opera se IA tiver 75%+ de certeza
+SCAN_INTERVAL = 60 # Seconds between scans (AI Throttle: 1 call per minute)
+CONFIDENCE_THRESHOLD = 75 # Only trade if AI has 75%+ confidence
 
 # Signal Duplicate Prevention Cache
 # Format: {"SYMBOL": {"direction": "BUY", "timestamp": datetime}}
