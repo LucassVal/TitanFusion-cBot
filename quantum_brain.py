@@ -871,14 +871,6 @@ if __name__ == "__main__":
                 
                 data_dict, price, sentiment, active_pos, metadata = load_market_data_from_ctrader(symbol)
                 
-                # --- PORTFOLIO CHECK (OVEREXPOSURE GUARD) ---
-                if len(active_pos) >= 3:
-                     # Log rejected signal for validation tracking
-                     log_rejected_signal(symbol, "MAX_POSITIONS", 0, "BLOCKED")
-                     print(f"  [{symbol}] Max Positions ({len(active_pos)}) reached. Skipping AI.")
-                     print(f"  [INTEGRITY] 🟡 Partial Cycle (Portfolio Full) | {time.time()-start_time:.2f}s")
-                     continue
-                
                 if data_dict:
                     print(f"\n  🔍 ANALYZING {symbol}:")
                     # 2. Escanear Padrões
@@ -893,21 +885,27 @@ if __name__ == "__main__":
                     # LOG L1: Imprime TODOS os TFs detalhados e DNA
                     print_detailed_matrix(matrix_analise, metadata)
                     ok_l1 = True
+                    
+                    # L4 SUPERVISOR: Intelligent Order Management
+                    l4_supervisor(active_pos, DATA_FOLDER)
+                    ok_l4 = True
                         
                     # 3. Inteligência Artificial
                     # (L2 Log is inside the function)
                     if sentiment: ok_l2 = True
                     decisao = consultar_gemini_antigravity(matrix_analise, price, symbol, sentiment)
                     
-                    
-                    # L4 SUPERVISOR: Intelligent Order Management
-                    l4_supervisor(active_pos, DATA_FOLDER)
-                    ok_l4 = True
-                    
                     # 4. Execução (com Validação)
                     if decisao:
                         ok_l3 = True
-                        escrever_sinal(decisao, symbol)
+                        
+                        # --- PORTFOLIO CHECK (FINAL GATE) ---
+                        # Runs AFTER AI so we see the decision logic (Log Completo L3)
+                        if len(active_pos) >= 3:
+                             log_rejected_signal(symbol, "MAX_POSITIONS", decisao.get('confidence',0), decisao.get('direction','N/A'))
+                             print(f"    [L3 Decision] ⏸️ Max Positions ({len(active_pos)}) reached. Execution Blocked.")
+                        else:
+                             escrever_sinal(decisao, symbol)
                     else:
                         print(f"    [L3 Decision]  ❌ FAILED (No AI Response/API Error)")
                     
