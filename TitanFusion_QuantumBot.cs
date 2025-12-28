@@ -1375,8 +1375,8 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
                             newSL = Math.Round(newSL, Symbol.Digits);
                             
                             // Apply
-                            var result = ModifyPosition(pos, newSL, pos.TakeProfit, stage);
-                            if (result.IsSuccessful)
+                            bool success = SafeModifyPosition(pos, newSL, pos.TakeProfit, stage);
+                            if (success)
                                 Print($"[MANAGER] {stage} | SL Ajustado para {newSL} (Locked: {Math.Abs(newSL-entryPrice)/entryPrice*100:F2}%)");
                         }
                     }
