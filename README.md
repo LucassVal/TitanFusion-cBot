@@ -14,10 +14,31 @@
 
 Titan Fusion isn't just a bot; it's a **Quantum Engine** that processes market data through 4 strict validation layers before taking any action.
 
-### **L1: Technical & Structural Analysis**
+### **L1: Technical & Structural Analysis (The Quant Lab)**
+
+This layer is the "Mathematical Backbone" of the system. Before any AI inference, Python locally executes a **High-Performance Quant Scan** calculating 10+ professional indicators to build a "Bio-Scan" of the asset.
+
 *   **13 Elite Patterns:** Automatically detects *Liquidity Sweeps, Fair Value Gaps (FVG), CHoCH, Wyckoff Springs, Order Blocks*, and more.
-*   **L1+ Structure (Local):** Python natively calculates *Trend Bias (EMA)*, *Volatility (Bollinger Squeeze)*, and *Key Levels* without spending API tokens.
+*   **L1+ Structure (Local):** Python natively calculates *Trend Bias (EMA)*, *Volatility (Bollinger Squeeze)*, and *Key Levels*.
 *   **Scan Grid:** A visual matrix in the console showing the status of every pattern across M5, M15, M30, H1, and H4 timeframes.
+
+#### **The Quant Matrix: Indicator x Strategy Mapping**
+We calculate 10+ specific indices. Each one serves a critical role in validating specific strategies:
+
+| Indicator / Metric | Function | Fast Scalp (M5) | Day Scalp (M15) | Momentum (H1) | Swing (H4) |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **EMA Triple (20/50/200)** | Trend Alignment | ❌ Ignore | ✅ Required | ✅ Strict | ✅ Strict |
+| **MACD (12,26,9)** | Trend Momentum | ❌ Ignore | ❌ Ignore | ✅ Signal Line | ✅ Histogram |
+| **RSI (14)** | Overbought/Sold | ✅ Reversion | ✅ Divergence | ❌ Ignore | ❌ Ignore |
+| **Stochastics (14,3,3)** | Fast Timing | ✅ Trigger | ✅ Trigger | ❌ Ignore | ❌ Ignore |
+| **Williams %R** | Exhaustion | ✅ Extreme | ❌ Ignore | ❌ Ignore | ✅ Reversal |
+| **Bollinger Width** | Volatility Cycle | ✅ Squeeze | ✅ Expansion | ✅ Breakout | ❌ Ignore |
+| **ATR (14)** | Real Volatility | ✅ Dynamic TP/SL | ✅ Dynamic TP/SL | ✅ Dynamic TP/SL | ✅ Dynamic TP/SL |
+| **OBV (On Balance Vol)**| Accumulation | ❌ Ignore | ❌ Ignore | ✅ Flow Check | ✅ Confirmation|
+| **VWAP** | Inst. Fair Value | ❌ Ignore | ✅ Support/Res | ✅ Trend Filter | ❌ Ignore |
+| **Flow Score** | Proprietary Algo | ❌ Ignore | ❌ Ignore | ✅ REQUIRED | ✅ REQUIRED |
+
+> **Note:** "Ignore" means the AI is instructed to downweight that metric for that specific mode, preventing noise (e.g., ignoring RSI in a strong Momentum trade).
 
 ### **L2: Market Sentiment (Contrarian)**
 *   **Real-Time Broker Data:** Reads the "Crowd Sentiment" directly from cTrader.

@@ -134,12 +134,118 @@ def detectar_padroes_institucionais(df, tf_name):
         "B_REVERSION": "LONG" if reversion_long else "SHORT" if reversion_short else None
     }
 
-def print_detailed_matrix(matrix, metadata):
-    """Imprime Grid de Escaneamento Completo (Todos os Padrões)"""
-    print(f"    [L1 DNA]       Digits: {metadata.get('digits')} | Pip: {metadata.get('pip_size')} | MinVol: {metadata.get('volume_min')}")
-    print("    [L1 Varredura] Status de Todos os Padrões (13/13):")
+# =============================================================================
+# 1.1 AUXILIARY ENGINE: MARKET STRUCTURE (L1+ HEAVY)
+# =============================================================================
+
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(df, period=14):
+    high_low = df['High'] - df['Low']
+    high_close = np.abs(df['High'] - df['Close'].shift())
+    low_close = np.abs(df['Low'] - df['Close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    return true_range.rolling(window=period).mean()
+
+def analyze_market_structure(df):
+    """
+    Local High-Performance Processing (10+ Indicators).
+    Generates a full 'Bio-Scan' of the asset for the AI.
+    """
+    if df is None or len(df) < 50: return {}
     
-    # Siglas para economizar espaço
+    close = df['Close']
+    high = df['High']
+    low = df['Low']
+    vol = df['Volume']
+    
+    # 1. TREND (Triple Screen EMA)
+    ema20 = close.ewm(span=20).mean().iloc[-1]
+    ema50 = close.ewm(span=50).mean().iloc[-1]
+    ema200 = close.ewm(span=200).mean().iloc[-1]
+    
+    # MACD (12, 26, 9)
+    k = close.ewm(span=12, adjust=False, min_periods=12).mean()
+    d = close.ewm(span=26, adjust=False, min_periods=26).mean()
+    macd = k - d
+    signal = macd.ewm(span=9, adjust=False, min_periods=9).mean()
+    macd_val = macd.iloc[-1]
+    sig_val = signal.iloc[-1]
+    
+    trend_score = 0
+    if close.iloc[-1] > ema20: trend_score += 1
+    if close.iloc[-1] > ema50: trend_score += 1
+    if close.iloc[-1] > ema200: trend_score += 2 # Higher weight
+    if macd_val > sig_val: trend_score += 1
+    
+    trend_status = "NEUTRAL"
+    if trend_score >= 4: trend_status = "STRONG_BULLISH 🚀"
+    elif trend_score <= 1: trend_status = "STRONG_BEARISH 🔻"
+    
+    # 2. MOMENTUM (RSI + Stoch)
+    rsi = calculate_rsi(close).iloc[-1]
+    stoch_k = 100 * ((close - low.rolling(14).min()) / (high.rolling(14).max() - low.rolling(14).min()))
+    stoch_val = stoch_k.iloc[-1]
+    
+    # Williams %R
+    wr = -100 * ((high.rolling(14).max() - close) / (high.rolling(14).max() - low.rolling(14).min()))
+    wr_val = wr.iloc[-1]
+    
+    momentum = "NEUTRAL"
+    if rsi > 70 or stoch_val > 80: momentum = "OVERBOUGHT (Risk of Reversal) ⚠️"
+    elif rsi < 30 or stoch_val < 20: momentum = "OVERSOLD (Bounce Likely) ♻️"
+    
+    # 3. VOLATILITY (Bollinger Squeeze + ATR)
+    atr = calculate_atr(df).iloc[-1]
+    std = close.rolling(20).std().iloc[-1]
+    sma = close.rolling(20).mean().iloc[-1]
+    # Width = (Upper - Lower) / SMA
+    bb_width = ((sma + 2*std) - (sma - 2*std)) / sma
+    
+    vol_status = "NORMAL"
+    if bb_width < 0.002: vol_status = "SQUEEZE (Pending Explosion) 💣"
+    elif bb_width > 0.015: vol_status = "HIGH_VOLATILITY ⚡"
+    
+    # 4. VOLUME & FLOW (OBV + VWAP Approx)
+    # Estimated OBV
+    obv_change = np.where(close > close.shift(1), vol, np.where(close < close.shift(1), -vol, 0))
+    # Simple slope check
+    obv_slope = pd.Series(obv_change).rolling(5).mean().iloc[-1]
+    
+    # Approx VWAP
+    vwap_approx = (close * vol).cumsum() / vol.cumsum()
+    vwap_val = vwap_approx.iloc[-1]
+    
+    flow = "NEUTRAL"
+    if obv_slope > 0 and close.iloc[-1] > vwap_val: flow = "INSTITUTIONAL ACCUMULATION 🏦"
+    elif obv_slope < 0 and close.iloc[-1] < vwap_val: flow = "INSTITUTIONAL DISTRIBUTION 📉"
+
+    return {
+        "trend_desc": trend_status,
+        "momentum_desc": momentum,
+        "vol_desc": vol_status,
+        "flow_desc": flow,
+        "indicators": {
+            "RSI14": round(rsi, 1),
+            "MACD": "Bull" if macd_val > sig_val else "Bear",
+            "ATR": round(atr, 5),
+            "BB_Width": round(bb_width, 4),
+            "Stoch": round(stoch_val, 1),
+            "WilliamsR": round(wr_val, 1)
+        }
+    }
+
+def print_detailed_matrix(matrix, metadata):
+    """Prints Full Scan Grid (All Patterns)"""
+    print(f"    [L1 DNA]       Digits: {metadata.get('digits')} | Pip: {metadata.get('pip_size')} | MinVol: {metadata.get('volume_min')}")
+    print("    [L1 Scan]      Pattern Status (13/13):")
+    
     # S=Sweep, F=FVG, C=Choch, W=Wyckoff, OB=OrderBlock, Ab=Absorp, Br=Breakout
     # P=Pullback, E=Engulf, R=Reversion
     
@@ -171,12 +277,12 @@ def print_detailed_matrix(matrix, metadata):
             print(f"      - {tf:<3}: [{line}]")
 
 def analyze_active_orders(active_pos, current_price):
-    """Analisa e imprime status das ordens abertas"""
+    """Analyzes and prints active order status"""
     if not active_pos:
-        print("    [L4 Gestão]    Nenhuma ordem aberta.")
+        print("    [L4 Mgmt]      No open orders.")
         return
 
-    print(f"    [L4 Gestão]    Monitorando {len(active_pos)} ordens:")
+    print(f"    [L4 Mgmt]      Monitoring {len(active_pos)} orders:")
     for pos in active_pos:
         # Conversão segura
         entry = float(pos.get('entry', 0))
@@ -190,8 +296,8 @@ def analyze_active_orders(active_pos, current_price):
         dist_tp = abs(tp - current_price) if tp > 0 else 0
         
         # Status
-        status_msg = "🟢 Em Lucro" if pnl > 0 else "🔴 Em Risco"
-        if sl > 0 and dist_sl < (entry * 0.001): status_msg += " (PERIGO: SL Próximo!)"
+        status_msg = "🟢 In Profit" if pnl > 0 else "🔴 At Risk"
+        if sl > 0 and dist_sl < (entry * 0.001): status_msg += " (DANGER: SL Near!)"
         
         print(f"      > #{pos.get('id')} {typ} | PnL: ${pnl:.2f} | {status_msg}")
         print(f"        SL: {sl:.5f} | TP: {tp:.5f}")
@@ -220,10 +326,10 @@ def log_to_journal(signal_data, symbol):
         with open(journal_file, "a", encoding='utf-8') as f:
             f.write(entry_line)
     except Exception as e:
-        print(f"⚠️ Erro ao salvar Jornal: {e}")
+        print(f"⚠️ Error saving Journal: {e}")
 
 def cleanup_old_files():
-    """Limpa arquivos temporários antigos (.tmp) para manter a pasta limpa"""
+    """Cleans up old temp files (.tmp) to keep folder clean"""
     try:
         current_time = time.time()
         for root, dirs, files in os.walk(DATA_FOLDER):
@@ -302,7 +408,7 @@ def load_market_data_from_ctrader(symbol):
         return data_dict, current_price, sentiment, active_pos, metadata
 
     except Exception as e:
-        print(f"❌ Erro ao ler dados de {symbol}: {e}")
+        print(f"❌ Error reading data from {symbol}: {e}")
         return None, 0.0
 
 # =============================================================================
@@ -344,9 +450,9 @@ def consultar_gemini_antigravity(matrix_padroes, current_price, symbol, sentimen
     
     # LOG CAMADA 2
     if sentiment_alert:
-        print(f"    [L2 Sentimento] 🚨 DIVERGÊNCIA: {sentiment_alert}")
+        print(f"    [L2 Sentiment] 🚨 DIVERGENCE: {sentiment_alert}")
     else:
-        print(f"    [L2 Sentimento] Neutro (Buy {sentiment['buy_percent']}% | Sell {sentiment['sell_percent']}%)")
+        print(f"    [L2 Sentiment] Neutral (Buy {sentiment['buy_percent']}% | Sell {sentiment['sell_percent']}%)")
     
     prompt = f"""
 ROLE: You are the ANTIGRAVITY ENGINE v3.0, an elite quantitative trading system. 
@@ -358,10 +464,12 @@ Current Price: {current_price}
 Market Sentiment (Broker): BUY {sentiment['buy_percent']}% | SELL {sentiment['sell_percent']}% ({sentiment['bias']})
 SENTIMENT ALERT: {sentiment_alert}
 
->>> MARKET STRUCTURE (L1+ LOCAL ANALYSIS) <<<
-Trend (H1): {structure_h1.get('trend', 'N/A')}
-Volatility: {structure_h1.get('volatility', 'N/A')}
-Position: {structure_h1.get('level', 'N/A')}
+>>> MARKET STRUCTURE (L1+ HEAVY ANALYSIS - 10 INDICES) <<<
+Trend: {structure_h1.get('trend_desc', 'N/A')}
+Momentum: {structure_h1.get('momentum_desc', 'N/A')}
+Volatility: {structure_h1.get('vol_desc', 'N/A')}
+Flow: {structure_h1.get('flow_desc', 'N/A')}
+Key Metrics: {structure_h1.get('indicators', {})}
 
 Active Patterns (Multi-Timeframe):
 {report_txt}
@@ -405,7 +513,7 @@ Active Patterns (Multi-Timeframe):
     }
 
     try:
-        # print("🧠 Antigravity: Consultando a Matrix...")
+        # print("🧠 Antigravity: Consulting Matrix...")
         response = requests.post(GEMINI_URL, json=payload, timeout=20)
         if response.status_code != 200: return None
         
@@ -413,9 +521,9 @@ Active Patterns (Multi-Timeframe):
         txt = txt.replace("```json", "").replace("```", "").strip()
         return json.loads(txt)
     except Exception as e:
-        print(f"    [L3 Decisão]   ❌ ERRO DE CONEXÃO GEMINI:")
+        print(f"    [L3 Decision]  ❌ GEMINI CONNECTION ERROR:")
         print(f"                   Status: {getattr(e.response, 'status_code', 'N/A') if hasattr(e, 'response') else 'N/A'}")
-        print(f"                   Detalhe: {str(e)[:200]}") # Trunca erro longo
+        print(f"                   Detail: {str(e)[:200]}") # Trunca erro longo
         return None
 
 # =============================================================================
@@ -430,8 +538,8 @@ def escrever_sinal(decisao, symbol):
     reason = decisao.get('reason', '')
     
     if action != 'APPROVE' or conf < CONFIDENCE_THRESHOLD:
-        print(f"    [L3 Decisão] ⛔ {action} ({strat}) | Conf: {conf}%")
-        print(f"                 Motivo: {reason}")
+        print(f"    [L3 Decision]  ⛔ {action} ({strat}) | Conf: {conf}%")
+        print(f"                   Reason: {reason}")
         return
 
     # --- CAMADA DE SEGURANÇA (RISK GUARD) ---
@@ -449,6 +557,13 @@ def escrever_sinal(decisao, symbol):
         symbol=symbol
     )
 
+    # Define Signal Validity based on Strategy Timeframe
+    validity_min = 15 # Default
+    if "FAST" in strat_raw: validity_min = 10
+    elif "SCALP" in strat_raw: validity_min = 30
+    elif "MOMENTUM" in strat_raw: validity_min = 60
+    elif "SWING" in strat_raw: validity_min = 240 # 4 Hours
+
     # Preparar Sinal Final
     sinal_final = {
         "status": "APPROVED",
@@ -459,6 +574,7 @@ def escrever_sinal(decisao, symbol):
         "entry": entry_raw,
         "stop": sl_safe,       # Valor seguro
         "target1": tp_safe,    # Valor seguro
+        "valid_until": (datetime.now() + pd.Timedelta(minutes=validity_min)).strftime("%H:%M:%S"),
         "timestamp": datetime.now().isoformat()
     }
     
@@ -476,9 +592,9 @@ def escrever_sinal(decisao, symbol):
         with open(temp, "w") as f:
             json.dump(sinal_final, f, indent=4)
         os.replace(temp, output_path)
-        print(f"🚀 SINAL ENVIADO [{symbol}]: {strat_raw} {decisao['direction']} | Conf: {decisao['confidence']}%")
+        print(f"🚀 SIGNAL SENT [{symbol}]: {strat_raw} {decisao['direction']} | Conf: {decisao['confidence']}%")
     except Exception as e:
-        print(f"❌ Erro ao escrever sinal: {e}")
+        print(f"❌ Error writing signal: {e}")
 
 # =============================================================================
 # MAIN LOOP
@@ -486,19 +602,19 @@ def escrever_sinal(decisao, symbol):
 
 if __name__ == "__main__":
     if not os.path.exists(DATA_FOLDER): os.makedirs(DATA_FOLDER)
-    print(f"🌌 TITAN FUSION - ANTIGRAVITY ENGINE V3.0 (ATIVO)")
-    print(f"📂 Ponte de Dados: {DATA_FOLDER}")
-    print(f"🤖 IA: Gemini 2.0 Flash (Risk Guard Ativo)")
+    print(f"🌌 TITAN FUSION - ANTIGRAVITY ENGINE V3.0 (ACTIVE)")
+    print(f"📂 Data Bridge: {DATA_FOLDER}")
+    print(f"🤖 AI: Gemini 2.0 Flash (Risk Guard Active)")
     
     while True:
         try:
             active_symbols = detect_active_symbols()
             if not active_symbols:
-                print(f"[AGUARDANDO] Nenhum símbolo detectado em {DATA_FOLDER}...")
+                print(f"[WAITING] No symbols detected in {DATA_FOLDER}...")
                 time.sleep(5)
                 continue
             
-            print(f"\n⚡ Ciclo de Varredura: {len(active_symbols)} ativos encontrados")
+            print(f"\n⚡ Scan Cycle: {len(active_symbols)} assets found")
             
             for symbol in active_symbols:
                 # 0. Manutenção (Cleanup)
@@ -518,11 +634,11 @@ if __name__ == "__main__":
                 if len(active_pos) >= 3:
                      # Silencioso para não spammar, mas evita gasto de token
                      print(f"  [{symbol}] Max Positions ({len(active_pos)}) reached. Skipping AI.")
-                     print(f"  [INTEGRIDADE] 🟡 Ciclo Parcial (Portfolio Full) | {time.time()-start_time:.2f}s")
+                     print(f"  [INTEGRITY] 🟡 Partial Cycle (Portfolio Full) | {time.time()-start_time:.2f}s")
                      continue
                 
                 if data_dict:
-                    print(f"\n  🔍 ANALISANDO {symbol}:")
+                    print(f"\n  🔍 ANALYZING {symbol}:")
                     # 2. Escanear Padrões
                     matrix_analise = {}
                     for tf, df in data_dict.items():
@@ -550,14 +666,14 @@ if __name__ == "__main__":
                         ok_l3 = True
                         escrever_sinal(decisao, symbol)
                     else:
-                        print(f"    [L3 Decisão]   ❌ FALHA (Sem resposta da IA/API Error)")
+                        print(f"    [L3 Decision]  ❌ FAILED (No AI Response/API Error)")
                     
                     # FINAL: INTEGRIDADE DO CICLO (SUPERVISOR)
                     elapsed = time.time() - start_time
                     if ok_l1 and ok_l2 and ok_l3 and ok_l4:
-                        print(f"  [INTEGRIDADE] ✅ CICLO VALIDADO (L1,L2,L3,L4 OK) | Latência: {elapsed:.2f}s")
+                        print(f"  [INTEGRITY] ✅ CYCLE VALIDATED (L1,L2,L3,L4 OK) | Latency: {elapsed:.2f}s")
                     else:
-                        print(f"  [INTEGRIDADE] ⚠️ FALHA : L1:{ok_l1} L2:{ok_l2} L3:{ok_l3} L4:{ok_l4}")
+                        print(f"  [INTEGRITY] ⚠️ FAILED : L1:{ok_l1} L2:{ok_l2} L3:{ok_l3} L4:{ok_l4}")
             
             time.sleep(SCAN_INTERVAL)
 
