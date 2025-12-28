@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title TITAN FUSION QUANTUM v1.3.0 (ANTIGRAVITY ENGINE)
+title TITAN FUSION QUANTUM v1.3.1 (ANTIGRAVITY ENGINE)
 color 0A
 cls
 echo =======================================================
 echo    TITAN FUSION QUANTUM - ANTIGRAVITY ENGINE v3.0
-echo                   Version 1.3.0
+echo                   Version 1.3.1
 echo =======================================================
 echo.
 echo  [1] Verifying system integrity...
@@ -16,6 +16,16 @@ if exist "quantum_brain.py" (
     pause
     exit
 )
+
+echo.
+echo  [2] Checking/Installing requirements...
+pip install -r requirements.txt -q --disable-pip-version-check
+if %ERRORLEVEL% EQU 0 (
+    echo  [OK] Dependencies ready.
+) else (
+    echo  [WARN] Some dependencies may be missing. Continuing...
+)
+
 echo.
 echo  Choose mode:
 echo  [1] Start Trading Engine (quantum_brain.py)
@@ -31,7 +41,7 @@ goto engine
 
 :engine
 echo.
-echo  [2] Starting Antigravity Engine...
+echo  [3] Starting Antigravity Engine...
 echo  [AI Throttle: 1 call per minute]
 echo.
 python quantum_brain.py
@@ -40,7 +50,7 @@ exit
 
 :validator
 echo.
-echo  [2] Running Signal Validator...
+echo  [3] Running Signal Validator...
 echo.
 python signal_validator.py
 pause
@@ -48,9 +58,9 @@ exit
 
 :both
 echo.
-echo  [2] Starting Antigravity Engine in background...
+echo  [3] Starting Antigravity Engine in background...
 start "Titan Quantum" cmd /c python quantum_brain.py
-echo  [3] Running Signal Validator...
+echo  [4] Running Signal Validator...
 echo.
 timeout /t 5 >nul
 python signal_validator.py

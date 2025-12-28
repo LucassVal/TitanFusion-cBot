@@ -4,7 +4,7 @@
 >
 > An institutional-grade trading engine that fuses **cTrader's** execution speed with **Python's** analytical power and **Gemini 2.0's** reasoning.
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/LucassVal/TitanFusion-cBot/releases)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/LucassVal/TitanFusion-cBot/releases)
 [![Engine](https://img.shields.io/badge/engine-Antigravity_v3-purple.svg)](https://ai.google.dev)
 [![Platform](https://img.shields.io/badge/platform-cTrader-orange.svg)](https://ctrader.com)
 
@@ -87,9 +87,30 @@ The terminal provides a military-grade dashboard of what the bot is thinking:
   [INTEGRITY] ✅ CYCLE VALIDATED (L1,L2,L3,L4 OK) | Latency: 2.54s
 ```
 
-###  dziennik **Journaling System**
+### 📓 **Journaling System**
 *   Every Approved Signal is saved to `Documents/TitanFusionAI/Journal/`.
-*   You get a permanent text record of every trade decision for later review.
+*   Permanent text record of every trade decision for later review.
+
+### 📊 **Signal Validator (NEW in v1.3.1)**
+An independent script that validates your trading signals:
+*   Calculates **Win Rate** per strategy (FAST_SCALP, SCALP, MOMENTUM, SWING).
+*   Generates **charts** (bar + pie) via matplotlib.
+*   Compares predictions vs actual market data.
+
+Run via launcher (Option 2) or: `python signal_validator.py`
+
+```text
+═══════════════════════════════════════════════════════════
+  SIGNAL VALIDATION REPORT - 2025-12-28
+═══════════════════════════════════════════════════════════
+Strategy       | Signals | Wins | Losses | Win Rate
+───────────────────────────────────────────────────────────
+FAST_SCALP     |   24    |  18  |   6    |   75% ✅
+SCALP          |    5    |   3  |   2    |   60% ⚠️
+───────────────────────────────────────────────────────────
+Overall Win Rate: 71.0%
+═══════════════════════════════════════════════════════════
+```
 
 ---
 
