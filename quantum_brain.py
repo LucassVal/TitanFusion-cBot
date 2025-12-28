@@ -936,7 +936,19 @@ if __name__ == "__main__":
                     else:
                         print(f"  [INTEGRITY] ⚠️ FAILED : L1:{ok_l1} L2:{ok_l2} L3:{ok_l3} L4:{ok_l4}")
             
-            time.sleep(SCAN_INTERVAL)
+            
+            # --- DYNAMIC SCAN INTERVAL ---
+            # Standard: 60s
+            # Full Portfolio (Opportunity Mode): 180s (3 min) to save tokens
+            current_interval = SCAN_INTERVAL
+            for symbol in active_symbols:
+                _, _, _, active_pos, _ = load_market_data_from_ctrader(symbol)
+                if len(active_pos) >= 3:
+                    current_interval = 180 # 3 minutes
+                    print(f"  [OPPORTUNITY MODE] 🐢 Slowing down scan to {current_interval}s (Portfolio Full)")
+                    break
+            
+            time.sleep(current_interval)
 
         except KeyboardInterrupt:
             print("\n🛑 System stopped by user.")
