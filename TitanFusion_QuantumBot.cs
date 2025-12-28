@@ -555,10 +555,27 @@ namespace cAlgo.Robots
                     catch (IOException) { Thread.Sleep(100); }
                 }
                 
-                if (string.IsNullOrEmpty(json)) return;
-                _currentSignal = JsonSerializer.Deserialize<QuantumSignal>(json);
+                if (string.IsNullOrEmpty(json))
+                {
+                    Print("[DEBUG] Signal file exists but is empty");
+                    return;
+                }
+                
+                var newSignal = JsonSerializer.Deserialize<QuantumSignal>(json);
+                if (newSignal != null)
+                {
+                    // Log only on change to avoid spam
+                    if (_currentSignal == null || newSignal.SignalId != _currentSignal.SignalId)
+                    {
+                        Print($"[DEBUG] Signal Loaded: {newSignal.SignalId}");
+                    }
+                    _currentSignal = newSignal;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Print($"[DEBUG] Error loading signal: {ex.Message}");
+            }
         }
 
         private void WriteSymbolConfig()
@@ -606,12 +623,20 @@ namespace cAlgo.Robots
             // Verificar se ja processou
             if (_currentSignal.SignalId == _lastProcessedSignalId) return;
             
+            Print($"[DEBUG] New Signal Received: ID={_currentSignal.SignalId} {_currentSignal.Signal} Conf={_currentSignal.Confidence}%");
+
             // Verificar se aprovado
-            if (_currentSignal.Status != "APPROVED") return;
+            if (_currentSignal.Status != "APPROVED")
+            {
+                Print($"[DEBUG] Signal Ignored: Status is {_currentSignal.Status}");
+                _lastProcessedSignalId = _currentSignal.SignalId;
+                return;
+            }
             
             // Verificar confianca minima
             if (_currentSignal.Confidence < MinConfidence)
             {
+                Print($"[DEBUG] Signal Ignored: Low Confidence ({_currentSignal.Confidence}% < {MinConfidence}%)");
                 _lastProcessedSignalId = _currentSignal.SignalId;
                 return;
             }
@@ -625,28 +650,38 @@ namespace cAlgo.Robots
                     var age = (DateTime.Now - signalTime).TotalMinutes;
                     if (age > 15) // Hardcoded timeout (15 min)
                     {
-                        Print($"Sinal expirado ({age:F0} min). Ignorando.");
+                        Print($"[DEBUG] Signal Ignored: Expired ({age:F0} min old > 15 min limit)");
                         _lastProcessedSignalId = _currentSignal.SignalId;
                         return;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Print($"[DEBUG] Error parsing timestamp: {ex.Message}");
+                }
             }
             
             // Verificar direcao valida
             if (_currentSignal.Signal != "BUY" && _currentSignal.Signal != "SELL")
             {
+                Print($"[DEBUG] Signal Ignored: Invalid Direction ({_currentSignal.Signal})");
                 _lastProcessedSignalId = _currentSignal.SignalId;
                 return;
             }
             
             // Safety checks
-            if (!PassesSafetyChecks()) return;
+            if (!PassesSafetyChecks())
+            {
+                Print($"[DEBUG] Signal Ignored: Failed Safety Checks (Spread/Time/Equity)");
+                _lastProcessedSignalId = _currentSignal.SignalId;
+                return;
+            }
             
             // Verificar se ja tem posicao
             var existingPositions = Positions.Where(p => p.SymbolName == SymbolName && p.Label == BOT_LABEL).ToList();
             if (existingPositions.Count >= MaxPositions)
             {
+                Print($"[DEBUG] Signal Ignored: Max Positions Reached ({existingPositions.Count} >= {MaxPositions})");
                 _lastProcessedSignalId = _currentSignal.SignalId;
                 return;
             }
@@ -654,11 +689,13 @@ namespace cAlgo.Robots
             // Verificar se Entry, SL, TP validos
             if (_currentSignal.Entry <= 0 || _currentSignal.Stop <= 0 || _currentSignal.Target1 <= 0)
             {
+                Print($"[DEBUG] Signal Ignored: Invalid Price Levels (E:{_currentSignal.Entry} SL:{_currentSignal.Stop} TP:{_currentSignal.Target1})");
                 _lastProcessedSignalId = _currentSignal.SignalId;
                 return;
             }
             
             // EXECUTAR TRADE!
+            Print($"[DEBUG] Executing Trade: {_currentSignal.Signal} @ {_currentSignal.Entry}");
             ExecuteTrade(_currentSignal);
             _lastProcessedSignalId = _currentSignal.SignalId;
         }
