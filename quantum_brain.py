@@ -891,44 +891,41 @@ if __name__ == "__main__":
                     ok_l4 = True
                         
                     
-                    # 3. Inteligência Artificial (SMART THROTTLE)
-                    # Se Max Positions atingido, chama IA apenas a cada 10 min para economizar tokens
-                    # Ms mantém L1/L4 ativos a cada minuto.
                     
-                    # Inicializar cache
-                    if 'last_ai_check' not in locals(): last_ai_check = {}
-                    
-                    should_run_ai = True
-                    is_standby = False
-                    
-                    if len(active_pos) >= 3:
-                        last_check = last_ai_check.get(symbol, 0)
-                        if time.time() - last_check < 600: # 10 minutes
-                            should_run_ai = False
-                            is_standby = True
-                            print(f"    [L3 Decision] ⏸️ AI Standby (Full Portfolio). Next check in {int(600 - (time.time()-last_check))}s")
-                        else:
-                            last_ai_check[symbol] = time.time()
-
-                    decisao = None
-                    if should_run_ai:
-                        if sentiment: ok_l2 = True
-                        decisao = consultar_gemini_antigravity(matrix_analise, price, symbol, sentiment)
+                    # 3. Inteligência Artificial
+                    # (L2 Log is inside the function)
+                    if sentiment: ok_l2 = True
+                    decisao = consultar_gemini_antigravity(matrix_analise, price, symbol, sentiment)
                     
                     # 4. Execução (com Validação)
                     if decisao:
                         ok_l3 = True
                         
-                        # --- PORTFOLIO CHECK (FINAL GATE) ---
+                        # --- OPPORTUNITY MODE ---
+                        # 1. Print Signal Details FIRST (so user can see it)
+                        # 2. Check Portfolio Limits
+                        # 3. Write to JSON only if allowed
+                        
+                        # Calculate safe targets for display
+                        sl_raw = decisao.get('stop_loss', 0)
+                        tp_raw = decisao.get('target', 0)
+                        entry_raw = decisao.get('entry', price)
+                        strat_raw = decisao.get('strategy', 'AI_STRAT')
+                        
+                        # Show the signal to the user (Opportunity)
+                        print(f"\n  🔭 OPPORTUNITY DETECTED [{symbol}]")
+                        print(f"     📍 {decisao['direction']} | Conf: {decisao['confidence']}%")
+                        print(f"     Entry: {entry_raw:.5f} | SL: {sl_raw:.5f} | TP: {tp_raw:.5f}")
+                        
+                        # Check Max Positions
                         if len(active_pos) >= 3:
                              log_rejected_signal(symbol, "MAX_POSITIONS", decisao.get('confidence',0), decisao.get('direction','N/A'))
-                             print(f"    [L3 Decision] ⏸️ Max Positions ({len(active_pos)}) reached. Execution Blocked.")
-                             # Update standby timer only after a successful check
-                             last_ai_check[symbol] = time.time()
+                             print(f"    [L3 Decision] ⚠️ AUTO-TRADE BLOCKED: Max Positions ({len(active_pos)}) reached.")
+                             print(f"                  -> Execute MANUALLY if you have funds.")
                         else:
                              escrever_sinal(decisao, symbol)
-                    elif is_standby:
-                        ok_l3 = True # Consideramos "OK" pois foi escolha consciente de standby
+                             print(f"    [L3 Decision] ✅ SIGNAL APPROVED & SENT TO CBOT")
+
                     else:
                         print(f"    [L3 Decision]  ❌ FAILED (No AI Response/API Error)")
                     
