@@ -90,6 +90,12 @@ namespace cAlgo.Robots
         [Parameter("Trail Distance % (Price)", DefaultValue = 0.3, MinValue = 0.01, MaxValue = 5.0)]
         public double TrailDistancePercent { get; set; }
         
+        [Parameter("Heaven Trigger % (TP3)", DefaultValue = 1.5, MinValue = 0.5, MaxValue = 100.0)]
+        public double HeavenTriggerPercent { get; set; }
+        
+        [Parameter("Heaven Gap % (Locked)", DefaultValue = 0.1, MinValue = 0.01, MaxValue = 5.0)]
+        public double HeavenGapPercent { get; set; }
+        
         [Parameter("Manage ALL Positions", DefaultValue = false)]
         public bool ManageAllPositions { get; set; }
         #endregion
@@ -284,8 +290,8 @@ namespace cAlgo.Robots
             // Gestao de trades existentes
             ManageOpenPositions();
             
-            // Breakeven automatico em 2 pisos
-            CheckBreakeven();
+            // Gestao de trades existentes (3-Stage Life Cycle)
+            ManageOpenPositions();
             
             // Verificar novos sinais
             if ((Server.Time - _lastSignalCheck).TotalSeconds >= 3)
@@ -1304,7 +1310,6 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
         private void ManageOpenPositions()
         {
             // Se ManageAllPositions=true, gerencia todas as posicoes do simbolo
-            // Se ManageAllPositions=false, gerencia apenas as do bot
             var positions = ManageAllPositions 
                 ? Positions.Where(p => p.SymbolName == SymbolName).ToList()
                 : Positions.Where(p => p.SymbolName == SymbolName && p.Label == BOT_LABEL).ToList();
@@ -1315,51 +1320,64 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
                 {
                     double currentPrice = pos.TradeType == TradeType.Buy ? Symbol.Bid : Symbol.Ask;
                     double entryPrice = pos.EntryPrice;
+                    double gainPercent = 0.0;
                     
-                    // Calcular Ganho em % do Preço
-                    // Ex: Entry 100, Price 101 => 1% Gain
-                    double priceDistance = Math.Abs(currentPrice - entryPrice);
-                    double gainPercent = (priceDistance / entryPrice) * 100.0;
+                    // Calcular Gain %
+                    if (pos.TradeType == TradeType.Buy)
+                        gainPercent = ((currentPrice - entryPrice) / entryPrice) * 100.0;
+                    else
+                        gainPercent = ((entryPrice - currentPrice) / entryPrice) * 100.0;
                     
-                    // Se estiver perdendo, gainPercent não importa para BE/Trail
-                    if (pos.NetProfit < 0) continue; 
+                    if (gainPercent <= 0) continue; // Sem lucro, nada a fazer
                     
-                    // Breakeven logic (Price %)
-                    if (EnableBreakeven && gainPercent >= BreakevenTriggerPercent)
+                    double newSL = 0.0;
+                    bool shouldUpdate = false;
+                    string stage = "";
+                    
+                    // --- STAGE 3: HEAVEN PROFIT (TP3 - Tight Lock) ---
+                    // "TP deve ir sendo acionado sempre para ir subindo"
+                    if (EnableTrailing && gainPercent >= HeavenTriggerPercent)
                     {
-                        double lockDistance = entryPrice * (BreakevenLockPercent / 100.0);
-                        double newSL = pos.TradeType == TradeType.Buy 
-                            ? entryPrice + lockDistance
-                            : entryPrice - lockDistance;
-                        
-                        // Atualiza apenas se melhorar o SL
-                        bool needsUpdate = pos.TradeType == TradeType.Buy 
-                            ? (pos.StopLoss == null || pos.StopLoss < newSL)
-                            : (pos.StopLoss == null || pos.StopLoss > newSL);
-                        
-                        if (needsUpdate)
-                        {
-                            SafeModifyPosition(pos, newSL, pos.TakeProfit, "Breakeven");
-                            Print($"BE ativado! Gain {gainPercent:F2}% > Trigger {BreakevenTriggerPercent}% | SL Ajustado");
-                        }
+                        double gap = currentPrice * (HeavenGapPercent / 100.0);
+                        newSL = pos.TradeType == TradeType.Buy ? currentPrice - gap : currentPrice + gap;
+                        stage = $"☁️ HEAVEN ({gainPercent:F1}%)";
+                        shouldUpdate = true;
+                    }
+                    // --- STAGE 2: DYNAMIC TRAIL (TP2 - Standard) ---
+                    else if (EnableTrailing && gainPercent >= TrailStartPercent)
+                    {
+                        double gap = currentPrice * (TrailDistancePercent / 100.0);
+                        newSL = pos.TradeType == TradeType.Buy ? currentPrice - gap : currentPrice + gap;
+                        stage = $"🚀 TRAIL ({gainPercent:F1}%)";
+                        shouldUpdate = true;
+                    }
+                    // --- STAGE 1: BREAKEVEN (TP1 - Safety) ---
+                    // "Lucro 0 ou 0.01"
+                    else if (EnableBreakeven && gainPercent >= BreakevenTriggerPercent)
+                    {
+                        double lockVal = entryPrice * (BreakevenLockPercent / 100.0);
+                        newSL = pos.TradeType == TradeType.Buy ? entryPrice + lockVal : entryPrice - lockVal;
+                        stage = $"🛡️ BE ({gainPercent:F1}%)";
+                        shouldUpdate = true;
                     }
                     
-                    // Trailing Stop Logic (Price %)
-                    if (EnableTrailing && gainPercent >= TrailStartPercent)
+                    // VALIDATION & EXECUTION
+                    if (shouldUpdate)
                     {
-                        double trailDistance = currentPrice * (TrailDistancePercent / 100.0);
-                        double newSL = pos.TradeType == TradeType.Buy
-                            ? currentPrice - trailDistance
-                            : currentPrice + trailDistance;
+                        // Check if new SL is better than current
+                        bool isBetter = pos.TradeType == TradeType.Buy 
+                            ? (!pos.StopLoss.HasValue || newSL > pos.StopLoss.Value)
+                            : (!pos.StopLoss.HasValue || newSL < pos.StopLoss.Value);
                             
-                        bool shouldUpdate = pos.TradeType == TradeType.Buy
-                            ? (pos.StopLoss == null || newSL > pos.StopLoss)
-                            : (pos.StopLoss == null || newSL < pos.StopLoss);
-                            
-                        if (shouldUpdate)
+                        if (isBetter)
                         {
-                            SafeModifyPosition(pos, newSL, pos.TakeProfit, "Trailing");
-                            Print($"Trailing ativado! Gain {gainPercent:F2}% | SL movido para {newSL}");
+                            // Rounding
+                            newSL = Math.Round(newSL, Symbol.Digits);
+                            
+                            // Apply
+                            var result = ModifyPosition(pos, newSL, pos.TakeProfit, stage);
+                            if (result.IsSuccessful)
+                                Print($"[MANAGER] {stage} | SL Ajustado para {newSL} (Locked: {Math.Abs(newSL-entryPrice)/entryPrice*100:F2}%)");
                         }
                     }
                 }
@@ -1656,109 +1674,6 @@ private bool SafeModifyPosition(Position pos, double? targetSL, double? targetTP
         }
         #endregion
         
-        #region Breakeven Management (2-Tier System)
-        private void CheckBreakeven()
-        {
-            if (!EnableBreakeven) return;
-            
-            var myPositions = Positions.Where(p => 
-                p.SymbolName == SymbolName && 
-                (ManageAllPositions || p.Label == BOT_LABEL)
-            );
-            
-            foreach (var pos in myPositions)
-            {
-                // Calcular lucro atual em %
-                double profitPct = ((Symbol.Bid - pos.EntryPrice) / pos.EntryPrice) * 100;
-                if (pos.TradeType == TradeType.Sell)
-                    profitPct = ((pos.EntryPrice - Symbol.Ask) / pos.EntryPrice) * 100;
-                
-                // SL atual
-                double? currentSL = pos.StopLoss;
-                if (!currentSL.HasValue) continue; // Sem SL definido, pular
-                
-                double newSL = 0;
-                bool shouldMove = false;
-                string reason = "";
-                
-                // TIER 2: Lucro Garantido (>= 3%)
-                if (profitPct >= BreakevenTier2TriggerPercent)
-                {
-                    double tier2Target = pos.EntryPrice + (pos.EntryPrice * (BreakevenTier2LockPercent / 100));
-                    if (pos.TradeType == TradeType.Sell)
-                        tier2Target = pos.EntryPrice - (pos.EntryPrice * (BreakevenTier2LockPercent / 100));
-                    
-                    // Só move se ainda não estiver nesse nível
-                    if (pos.TradeType == TradeType.Buy && currentSL.Value < tier2Target)
-                    {
-                        newSL = tier2Target;
-                        shouldMove = true;
-                        reason = $"TIER2 ({profitPct:F2}%): Garantindo +{BreakevenTier2LockPercent}%";
-                    }
-                    else if (pos.TradeType == TradeType.Sell && currentSL.Value > tier2Target)
-                    {
-                        newSL = tier2Target;
-                        shouldMove = true;
-                        reason = $"TIER2 ({profitPct:F2}%): Garantindo +{BreakevenTier2LockPercent}%";
-                    }
-                }
-                // TIER 1: Breakeven (>= 0.5%)
-                else if (profitPct >= BreakevenTriggerPercent)
-                {
-                    double tier1Target = pos.EntryPrice + (pos.EntryPrice * (BreakevenLockPercent / 100));
-                    if (pos.TradeType == TradeType.Sell)
-                        tier1Target = pos.EntryPrice - (pos.EntryPrice * (BreakevenLockPercent / 100));
-                    
-                    // Só move se ainda não estiver em breakeven
-                    if (pos.TradeType == TradeType.Buy && currentSL.Value < tier1Target)
-                    {
-                        newSL = tier1Target;
-                        shouldMove = true;
-                        reason = $"TIER1 ({profitPct:F2}%): Breakeven +{BreakevenLockPercent}%";
-                    }
-                    else if (pos.TradeType == TradeType.Sell && currentSL.Value > tier1Target)
-                    {
-                        newSL = tier1Target;
-                        shouldMove = true;
-                        reason = $"TIER1 ({profitPct:F2}%): Breakeven +{BreakevenLockPercent}%";
-                    }
-                }
-                
-                if (shouldMove)
-                {
-                    // FIX Issue #6: Preservar TP existente, não setar para 0
-                    double? tpValue = pos.TakeProfit.HasValue ? pos.TakeProfit.Value : (double?)null;
-                    
-                    if (tpValue.HasValue)
-                    {
-                        // TP existe: mover SL E preservar TP
-                        var result = ModifyPosition(pos, newSL, tpValue.Value, true);
-                        if (result.IsSuccessful)
-                        {
-                            Print($"✅ [{reason}] SL movido: {currentSL.Value:F5} → {newSL:F5} | TP preservado: {tpValue.Value:F5} (PID{pos.Id})");
-                        }
-                        else
-                        {
-                            Print($"❌ Falha BE: {result.Error} (PID{pos.Id})");
-                        }
-                    }
-                    else
-                    {
-                        // TP não existe: apenas mover SL sem setar TP
-                        // Passando 0 com protectionType=false para não criar TP
-                        var result = ModifyPosition(pos, newSL, 0, false);
-                        if (result.IsSuccessful)
-                        {
-                            Print($"✅ [{reason}] SL movido: {currentSL.Value:F5} → {newSL:F5} | Sem TP (PID{pos.Id})");
-                        }
-                        else
-                        {
-                            Print($"❌ Falha BE: {result.Error} (PID{pos.Id})");
-                        }
-                    }
-                }
-            }
-        }
-        #endregion
+
     }
 }
