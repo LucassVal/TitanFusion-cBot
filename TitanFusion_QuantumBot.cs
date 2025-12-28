@@ -163,7 +163,10 @@ namespace cAlgo.Robots
         {
             var pos = args.Position;
             
-            // Apenas posicoes deste bot
+            // Track ALL closed positions (not just this bot) for validation
+            ExportClosedPosition(pos);
+            
+            // Only count stats for positions from THIS bot
             if (pos.Label != BOT_LABEL || pos.SymbolName != SymbolName) return;
             
             double netProfit = pos.NetProfit;
@@ -182,6 +185,69 @@ namespace cAlgo.Robots
                 Print($"LOSS: ${netProfit:F2} | Session: {_sessionWins}W/{_sessionLosses}L");
             }
 
+        }
+        
+        /// <summary>
+        /// Export closed position data for Signal Validator
+        /// </summary>
+        private void ExportClosedPosition(Position pos)
+        {
+            try
+            {
+                string closedPath = Path.Combine(_dataFolder, "closed_positions.json");
+                
+                // Determine close type
+                string closeType = "MANUAL";
+                if (pos.StopLoss.HasValue && Math.Abs(Symbol.Bid - pos.StopLoss.Value) < Symbol.PipSize * 5)
+                    closeType = "HIT_SL";
+                else if (pos.TakeProfit.HasValue && Math.Abs(Symbol.Bid - pos.TakeProfit.Value) < Symbol.PipSize * 5)
+                    closeType = "HIT_TP";
+                else if (pos.NetProfit > 0)
+                    closeType = "PROFIT_CLOSE";
+                else if (pos.NetProfit < 0)
+                    closeType = "LOSS_CLOSE";
+                
+                var closedData = new
+                {
+                    id = pos.Id,
+                    symbol = pos.SymbolName,
+                    type = pos.TradeType.ToString().ToUpper(),
+                    entry_price = pos.EntryPrice,
+                    close_price = Symbol.Bid,
+                    sl = pos.StopLoss ?? 0.0,
+                    tp = pos.TakeProfit ?? 0.0,
+                    pnl = pos.NetProfit,
+                    volume = pos.VolumeInUnits,
+                    strategy = pos.Comment ?? "UNKNOWN",
+                    close_type = closeType,
+                    close_time = Server.Time.ToString("yyyy-MM-dd HH:mm:ss")
+                };
+                
+                // Read existing, append, write
+                var existingList = new List<object>();
+                if (File.Exists(closedPath))
+                {
+                    string existing = File.ReadAllText(closedPath);
+                    var arr = JsonSerializer.Deserialize<JsonElement[]>(existing);
+                    if (arr != null)
+                    {
+                        foreach (var item in arr)
+                            existingList.Add(item);
+                    }
+                }
+                existingList.Add(closedData);
+                
+                // Keep only last 100 entries
+                if (existingList.Count > 100)
+                    existingList = existingList.Skip(existingList.Count - 100).ToList();
+                
+                File.WriteAllText(closedPath, JsonSerializer.Serialize(existingList, new JsonSerializerOptions { WriteIndented = true }));
+                Print($"[VALIDATOR] Exported closed position #{pos.Id}: {closeType} PnL={pos.NetProfit:F2}");
+            }
+            catch (Exception ex)
+            {
+                Print($"[VALIDATOR ERROR] {ex.Message}");
+            }
         }
 
         protected override void OnTick()

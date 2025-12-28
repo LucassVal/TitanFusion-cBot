@@ -424,6 +424,39 @@ def l4_supervisor(active_positions, data_folder):
 # =============================================================================
 
 JOURNAL_FOLDER = os.path.join(DATA_FOLDER, "Journal")
+REJECTED_FILE = os.path.join(DATA_FOLDER, "rejected_signals.json")
+
+def log_rejected_signal(symbol, reason, confidence=0, direction="N/A"):
+    """
+    Log signals that were NOT executed (for validation analysis).
+    Tracks: max positions, low confidence, duplicate blocks, etc.
+    """
+    try:
+        entry = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "symbol": symbol,
+            "direction": direction,
+            "confidence": confidence,
+            "reason": reason
+        }
+        
+        # Read existing, append, write
+        existing = []
+        if os.path.exists(REJECTED_FILE):
+            with open(REJECTED_FILE, "r") as f:
+                existing = json.load(f)
+        
+        existing.append(entry)
+        
+        # Keep only last 200 entries
+        if len(existing) > 200:
+            existing = existing[-200:]
+        
+        with open(REJECTED_FILE, "w") as f:
+            json.dump(existing, f, indent=2)
+            
+    except Exception as e:
+        print(f"  [WARN] Could not log rejected signal: {e}")
 
 def log_to_journal(signal_data, symbol):
     """Salva um resumo do sinal no Jornal (Histórico Permanente)"""
@@ -773,7 +806,11 @@ def escrever_sinal(decisao, symbol):
         with open(temp, "w") as f:
             json.dump(sinal_final, f, indent=4)
         os.replace(temp, output_path)
-        print(f"🚀 SIGNAL SENT [{symbol}]: {strat_raw} {decisao['direction']} | Conf: {decisao['confidence']}%")
+        
+        # Enhanced Signal Log with Entry/SL/TP
+        print(f"\n  🚀 SIGNAL SENT [{symbol}]: {strat_raw} {decisao['direction']} | Conf: {decisao['confidence']}%")
+        print(f"     Entry: {entry_raw:.5f} | SL: {sl_safe:.5f} | TP: {tp_safe:.5f}")
+        print(f"     Valid Until: {sinal_final['valid_until']} | ID: {sinal_final['signal_id']}")
     except Exception as e:
         print(f"❌ Error writing signal: {e}")
 
@@ -813,7 +850,8 @@ if __name__ == "__main__":
                 
                 # --- PORTFOLIO CHECK (OVEREXPOSURE GUARD) ---
                 if len(active_pos) >= 3:
-                     # Silencioso para não spammar, mas evita gasto de token
+                     # Log rejected signal for validation tracking
+                     log_rejected_signal(symbol, "MAX_POSITIONS", 0, "BLOCKED")
                      print(f"  [{symbol}] Max Positions ({len(active_pos)}) reached. Skipping AI.")
                      print(f"  [INTEGRITY] 🟡 Partial Cycle (Portfolio Full) | {time.time()-start_time:.2f}s")
                      continue
