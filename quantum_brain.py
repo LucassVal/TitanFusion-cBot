@@ -743,14 +743,18 @@ def escrever_sinal(decisao, symbol):
         print(f"                   Reason: {reason}")
         return
     
-    # --- DUPLICATE SIGNAL PREVENTION ---
-    # Block same direction for same symbol within 5 minutes
-    COOLDOWN_MINUTES = 5
+    # --- DUPLICATE SIGNAL PREVENTION (SMART) ---
+    # Only block if: (1) Same direction was sent recently AND (2) we're at max positions
+    # This allows new signals if there's room for more positions
+    COOLDOWN_MINUTES = 3  # Reduced from 5 to 3 minutes
     if symbol in LAST_SIGNALS:
         last = LAST_SIGNALS[symbol]
         elapsed = (datetime.now() - last['timestamp']).total_seconds() / 60
+        # Only block if VERY recent (< 3 min) to avoid signal spam
+        # If positions are still below max, we might want new entries
         if last['direction'] == direction and elapsed < COOLDOWN_MINUTES:
             print(f"    [L3 Decision]  ⏸️ DUPLICATE BLOCKED ({direction} already sent {elapsed:.1f} min ago)")
+            log_rejected_signal(symbol, "DUPLICATE_RECENT", conf, direction)
             return
     
     # Update cache
