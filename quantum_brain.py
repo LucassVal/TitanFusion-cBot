@@ -777,10 +777,24 @@ def escrever_sinal(decisao, symbol):
 
     # Define Signal Validity based on Strategy Timeframe
     validity_min = 15 # Default
-    if "FAST" in strat_raw: validity_min = 10
-    elif "SCALP" in strat_raw: validity_min = 30
-    elif "MOMENTUM" in strat_raw: validity_min = 60
-    elif "SWING" in strat_raw: validity_min = 240 # 4 Hours
+    timeframe = "M15"  # Default
+    if "FAST" in strat_raw: 
+        validity_min = 10
+        timeframe = "M5"
+    elif "SCALP" in strat_raw: 
+        validity_min = 30
+        timeframe = "M15"
+    elif "MOMENTUM" in strat_raw: 
+        validity_min = 60
+        timeframe = "H1"
+    elif "SWING" in strat_raw: 
+        validity_min = 240 # 4 Hours
+        timeframe = "H4"
+
+    # Calculate Risk/Reward Ratio
+    risk = abs(entry_raw - sl_safe)
+    reward = abs(tp_safe - entry_raw)
+    rr_ratio = reward / risk if risk > 0 else 0
 
     # Preparar Sinal Final
     sinal_final = {
@@ -789,9 +803,12 @@ def escrever_sinal(decisao, symbol):
         "best_strategy": f"{strat_raw} ({decisao.get('reason','Revisão IA')[:30]}...)",
         "signal": decisao['direction'], # BUY/SELL
         "confidence": decisao['confidence'],
+        "timeframe": timeframe,
         "entry": entry_raw,
         "stop": sl_safe,       # Valor seguro
         "target1": tp_safe,    # Valor seguro
+        "rr_ratio": round(rr_ratio, 2),
+        "valid_for_minutes": validity_min,
         "valid_until": (datetime.now() + pd.Timedelta(minutes=validity_min)).strftime("%H:%M:%S"),
         "timestamp": datetime.now().isoformat()
     }
@@ -811,10 +828,12 @@ def escrever_sinal(decisao, symbol):
             json.dump(sinal_final, f, indent=4)
         os.replace(temp, output_path)
         
-        # Enhanced Signal Log with Entry/SL/TP
-        print(f"\n  🚀 SIGNAL SENT [{symbol}]: {strat_raw} {decisao['direction']} | Conf: {decisao['confidence']}%")
+        # Enhanced Signal Log (Telegram-Ready Format)
+        print(f"\n  🚀 SIGNAL [{symbol}] {timeframe}")
+        print(f"     📍 {strat_raw} {decisao['direction']} | Conf: {decisao['confidence']}%")
         print(f"     Entry: {entry_raw:.5f} | SL: {sl_safe:.5f} | TP: {tp_safe:.5f}")
-        print(f"     Valid Until: {sinal_final['valid_until']} | ID: {sinal_final['signal_id']}")
+        print(f"     ⏱️ Valid: {validity_min} min (until {sinal_final['valid_until']}) | R:R {rr_ratio:.1f}:1")
+        print(f"     🆔 {sinal_final['signal_id']}")
     except Exception as e:
         print(f"❌ Error writing signal: {e}")
 
