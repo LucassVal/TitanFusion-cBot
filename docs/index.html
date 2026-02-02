@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Titan Pro v2.7 - Complete User Manual</title>
+    <style>
+      :root {
+        --bg-dark: #0a0a0f;
+        --bg-card: #12121a;
+        --bg-card-hover: #1a1a25;
+        --accent-gold: #ffd700;
+        --accent-lime: #00ff88;
+        --accent-red: #ff4444;
+        --accent-cyan: #00d4ff;
+        --text-primary: #ffffff;
+        --text-secondary: #a0a0b0;
+        --border-color: #2a2a3a;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--bg-dark);
+        color: var(--text-primary);
+        line-height: 1.6;
+      }
+
+      .hero {
+        background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%);
+        padding: 60px 20px;
+        text-align: center;
+        border-bottom: 2px solid var(--accent-gold);
+      }
+
+      .hero h1 {
+        font-size: 3rem;
+        background: linear-gradient(90deg, var(--accent-gold), #ffaa00);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 10px;
+      }
+
+      .hero .subtitle {
+        color: var(--text-secondary);
+        font-size: 1.2rem;
+      }
+
+      .hero .version {
+        display: inline-block;
+        background: var(--accent-gold);
+        color: #000;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-weight: bold;
+        margin-top: 15px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      nav.toc {
+        background: var(--bg-card);
+        padding: 30px;
+        border-radius: 15px;
+        margin-bottom: 40px;
+        border: 1px solid var(--border-color);
+      }
+
+      nav.toc h2 {
+        color: var(--accent-gold);
+        margin-bottom: 20px;
+        font-size: 1.5rem;
+      }
+
+      nav.toc ul {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 10px;
+      }
+
+      nav.toc a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 8px 15px;
+        display: block;
+        border-radius: 8px;
+        transition: all 0.3s;
+      }
+
+      nav.toc a:hover {
+        background: var(--bg-card-hover);
+        color: var(--accent-lime);
+      }
+
+      section {
+        background: var(--bg-card);
+        padding: 30px;
+        border-radius: 15px;
+        margin-bottom: 30px;
+        border: 1px solid var(--border-color);
+      }
+
+      section h2 {
+        color: var(--accent-gold);
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--border-color);
+      }
+
+      section h3 {
+        color: var(--accent-cyan);
+        font-size: 1.3rem;
+        margin: 25px 0 15px;
+      }
+
+      p {
+        color: var(--text-secondary);
+        margin-bottom: 15px;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+
+      .feature-card {
+        background: var(--bg-card-hover);
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        transition:
+          transform 0.3s,
+          box-shadow 0.3s;
+      }
+
+      .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(255, 215, 0, 0.1);
+      }
+
+      .feature-card h4 {
+        color: var(--accent-lime);
+        margin-bottom: 10px;
+      }
+
+      .feature-card .icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+      }
+
+      th,
+      td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      th {
+        background: var(--bg-card-hover);
+        color: var(--accent-gold);
+        font-weight: 600;
+      }
+
+      tr:hover {
+        background: rgba(255, 215, 0, 0.05);
+      }
+
+      code {
+        background: #1e1e2e;
+        color: var(--accent-lime);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: "Consolas", monospace;
+      }
+
+      pre {
+        background: #1e1e2e;
+        padding: 20px;
+        border-radius: 10px;
+        overflow-x: auto;
+        margin: 15px 0;
+        border: 1px solid var(--border-color);
+      }
+
+      pre code {
+        background: none;
+        padding: 0;
+      }
+
+      .tip {
+        background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), transparent);
+        border-left: 4px solid var(--accent-lime);
+        padding: 15px 20px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .warning {
+        background: linear-gradient(90deg, rgba(255, 170, 0, 0.1), transparent);
+        border-left: 4px solid #ffaa00;
+        padding: 15px 20px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .signal-box {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 15px;
+        border-radius: 8px;
+        font-weight: bold;
+        margin: 5px;
+      }
+
+      .signal-buy {
+        background: rgba(0, 255, 136, 0.2);
+        color: var(--accent-lime);
+      }
+      .signal-sell {
+        background: rgba(255, 68, 68, 0.2);
+        color: var(--accent-red);
+      }
+      .signal-wait {
+        background: rgba(255, 215, 0, 0.2);
+        color: var(--accent-gold);
+      }
+
+      .cloud-badge {
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        margin: 3px;
+      }
+
+      .cloud-ichimoku {
+        background: #4a90a4;
+      }
+      .cloud-bollinger {
+        background: #9b59b6;
+      }
+      .cloud-donchian {
+        background: #e67e22;
+      }
+      .cloud-keltner {
+        background: #27ae60;
+      }
+      .cloud-gmma {
+        background: #e74c3c;
+      }
+
+      footer {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-secondary);
+        border-top: 1px solid var(--border-color);
+      }
+
+      .arch-diagram {
+        background: #0d0d12;
+        padding: 20px;
+        border-radius: 10px;
+        font-family: "Consolas", monospace;
+        font-size: 0.9rem;
+        overflow-x: auto;
+        white-space: pre;
+        color: var(--accent-cyan);
+      }
+
+      @media (max-width: 768px) {
+        .hero h1 {
+          font-size: 2rem;
+        }
+        nav.toc ul {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <h1>⚡ TITAN PRO</h1>
+      <p class="subtitle">Advanced Multi-Cloud Trading Indicator for cTrader</p>
+      <span class="version">v2.7.0 - Cloud Intelligence</span>
+    </header>
+
+    <div class="container">
+      <nav class="toc">
+        <h2>📑 Table of Contents</h2>
+        <ul>
+          <li><a href="#overview">1. Overview & Architecture</a></li>
+          <li><a href="#installation">2. Getting Started</a></li>
+          <li><a href="#versions">3. LITE vs PRO Versions</a></li>
+          <li><a href="#market-profiles">4. Market Profiles</a></li>
+          <li>
+            <a href="#cloud-intelligence">5. Cloud Intelligence System</a>
+          </li>
+          <li><a href="#pandas-ta">6. Pandas-TA Indicators</a></li>
+          <li><a href="#dashboard">7. Dashboard Guide</a></li>
+          <li><a href="#signals">8. Signal Generation</a></li>
+          <li><a href="#strategies">9. Strategy Modes</a></li>
+          <li><a href="#ml-engines">10. ML Adaptive Engines</a></li>
+          <li><a href="#parameters">11. Parameters Reference</a></li>
+          <li><a href="#troubleshooting">12. Troubleshooting</a></li>
+        </ul>
+      </nav>
+
+      <section id="overview">
+        <h2>1. Overview & Architecture</h2>
+
+        <p>
+          Titan Pro is a professional-grade trading indicator that combines
+          multiple analysis systems into a single, cohesive tool. It features 5
+          cloud types, 10 Pandas-TA indicators, 9 ML adaptive engines, and a
+          real-time dashboard.
+        </p>
+
+        <div class="arch-diagram">
+          ┌─────────────────────────────────────────────────────────────────────────────┐
+          │ TITAN PRO v2.7 │
+          ├──────────────┬──────────────┬──────────────┬────────────────────────────────┤
+          │ TREND ENGINE │ LEVELS ENGINE│ ML OPTIMIZE │ CLOUD INTELLIGENCE ★★ │
+          │ • HMA Tunnel │ • Pivots │ • 9 Engines │ • 5 Cloud Types │ │ • MTF
+          Filter │ • Dynamic S/R│ • Session │ • Auto-Params by Market │ │ • MACD
+          │ • Fibo Zones │ • Regime │ • BUY/SELL/WAIT Signals │
+          ├──────────────┴──────────────┴──────────────┴────────────────────────────────┤
+          │ PANDAS-TA INDICATORS │ │ Squeeze Pro | SuperTrend | Bollinger |
+          Keltner | VWAP | StochRSI │
+          ├─────────────────────────────────────────────────────────────────────────────┤
+          │ SIGNAL GENERATION │ │ Breakout + MTF + ML + Confluence + [VOL✓] +
+          [OB✓] + [CLOUD CONFIRM] │
+          ├─────────────────────────────────────────────────────────────────────────────┤
+          │ DASHBOARD UI │ │ Real-time Panel + Trade Setup + Colored Status +
+          Strategy Cards │
+          └─────────────────────────────────────────────────────────────────────────────┘
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="icon">☁️</div>
+            <h4>5 Cloud Systems</h4>
+            <p>
+              Ichimoku, Bollinger, Donchian, Keltner, and GMMA clouds with
+              adaptive parameters.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">📊</div>
+            <h4>10 Pandas-TA Indicators</h4>
+            <p>
+              Squeeze Pro, SuperTrend, VWAP, StochRSI, and more - manually
+              calculated for cTrader.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">🧠</div>
+            <h4>9 ML Engines</h4>
+            <p>
+              Adaptive algorithms that optimize parameters based on market
+              conditions.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="icon">📈</div>
+            <h4>Real-time Dashboard</h4>
+            <p>
+              Comprehensive UI showing all metrics, signals, and trade setups.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="installation">
+        <h2>2. Getting Started</h2>
+
+        <div class="tip">
+          <strong>🎉 Congratulations!</strong> You have successfully installed
+          Titan Pro from the cTrader Store. This manual will help you get the
+          most out of your indicator.
+        </div>
+
+        <h3>How to Apply to Chart</h3>
+        <p>
+          Right-click on your chart → <strong>Indicators</strong> →
+          <strong>Titan Pro v2</strong>
+        </p>
+
+        <h3>Recommended Settings</h3>
+        <table>
+          <tr>
+            <th>Setting</th>
+            <th>Recommended</th>
+            <th>Reason</th>
+          </tr>
+          <tr>
+            <td>Timeframe</td>
+            <td>M15 or H1</td>
+            <td>Best balance of signals and accuracy</td>
+          </tr>
+          <tr>
+            <td>Market Profile</td>
+            <td>AutoDetect</td>
+            <td>Automatically optimizes for your symbol</td>
+          </tr>
+          <tr>
+            <td>Clouds</td>
+            <td>1-2 max</td>
+            <td>Too many clouds create conflicting signals</td>
+          </tr>
+        </table>
+
+        <div class="tip">
+          <strong>💡 Tip:</strong> Start with Ichimoku Cloud only. Add other
+          clouds once you're comfortable with the signals.
+        </div>
+      </section>
+
+      <section id="versions">
+        <h2>Version Comparison: LITE vs PRO</h2>
+
+        <div class="feature-grid">
+          <div class="feature-card" style="border: 2px solid #888">
+            <h4>🆓 Titan LITE (Free)</h4>
+            <p>Perfect for beginners</p>
+            <ul style="color: var(--text-secondary); margin-left: 20px">
+              <li>✅ HMA Tunnel Visualization</li>
+              <li>✅ MTF Filter (M15, H1)</li>
+              <li>✅ Basic Dashboard</li>
+              <li>✅ Ichimoku Cloud Only</li>
+              <li>✅ RSI + ADX Indicators</li>
+              <li>✅ Pivot Levels</li>
+              <li>❌ Other 4 Cloud Types</li>
+              <li>❌ ML Adaptive Engines</li>
+              <li>❌ Pandas-TA Indicators</li>
+              <li>❌ Order Blocks (SMC)</li>
+            </ul>
+          </div>
+          <div
+            class="feature-card"
+            style="border: 2px solid var(--accent-gold)"
+          >
+            <h4>⭐ Titan PRO (Full Version)</h4>
+            <p>For serious traders</p>
+            <ul style="color: var(--text-secondary); margin-left: 20px">
+              <li>✅ Everything in LITE</li>
+              <li>✅ All 5 Cloud Types</li>
+              <li>✅ 9 ML Adaptive Engines</li>
+              <li>✅ 10 Pandas-TA Indicators</li>
+              <li>✅ Order Blocks (SMC)</li>
+              <li>✅ 4 Strategy Modes</li>
+              <li>✅ Cloud Intelligence Auto-Params</li>
+              <li>✅ Advanced Risk Management</li>
+              <li>✅ Priority Support</li>
+              <li>✅ Lifetime Updates</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="warning">
+          <strong>⚠️ LITE Version Notice:</strong> When you try to enable a PRO
+          feature in the LITE version, a notification will appear in the log.
+          Upgrade to PRO for full access.
+        </div>
+      </section>
+
+      <section id="market-profiles">
+        <h2>3. Market Profiles</h2>
+
+        <p>
+          Titan Pro automatically optimizes its parameters based on the selected
+          market profile:
+        </p>
+
+        <table>
+          <tr>
+            <th>Profile</th>
+            <th>Best For</th>
+            <th>Ichimoku Settings</th>
+            <th>Characteristics</th>
+          </tr>
+          <tr>
+            <td><strong>Bitcoin</strong></td>
+            <td>BTC/USD, Crypto</td>
+            <td>7/22/44</td>
+            <td>Shorter periods for high volatility</td>
+          </tr>
+          <tr>
+            <td><strong>Gold</strong></td>
+            <td>XAUUSD, Metals</td>
+            <td>9/26/52</td>
+            <td>Standard Ichimoku parameters</td>
+          </tr>
+          <tr>
+            <td><strong>Indices</strong></td>
+            <td>US30, SPX500, NAS100</td>
+            <td>9/26/52</td>
+            <td>Focus on breakout patterns</td>
+          </tr>
+          <tr>
+            <td><strong>Forex</strong></td>
+            <td>EURUSD, GBPUSD</td>
+            <td>9/26/52</td>
+            <td>Trend-focused analysis</td>
+          </tr>
+          <tr>
+            <td><strong>AutoDetect</strong></td>
+            <td>Any</td>
+            <td>Auto</td>
+            <td>Detects by symbol name</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="cloud-intelligence">
+        <h2>4. Cloud Intelligence System</h2>
+
+        <p>
+          The Cloud Intelligence system provides 5 different cloud types, each
+          optimized for specific market conditions:
+        </p>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <span class="cloud-badge cloud-ichimoku">Ichimoku</span>
+            <h4>Ichimoku Cloud</h4>
+            <p><strong>Best for:</strong> Forex, Gold</p>
+            <p>
+              <strong>Signals:</strong> TK Cross, Cloud Breakout, Kijun Bounce
+            </p>
+          </div>
+          <div class="feature-card">
+            <span class="cloud-badge cloud-bollinger">Bollinger</span>
+            <h4>Bollinger Cloud</h4>
+            <p><strong>Best for:</strong> Bitcoin, High Volatility</p>
+            <p><strong>Signals:</strong> Band Touch, %B Extremes, Squeeze</p>
+          </div>
+          <div class="feature-card">
+            <span class="cloud-badge cloud-donchian">Donchian</span>
+            <h4>Donchian Channel</h4>
+            <p><strong>Best for:</strong> Crypto, Indices</p>
+            <p><strong>Signals:</strong> Channel Breakout, Turtle Rules</p>
+          </div>
+          <div class="feature-card">
+            <span class="cloud-badge cloud-keltner">Keltner</span>
+            <h4>Keltner Channel</h4>
+            <p><strong>Best for:</strong> Forex, Volatility</p>
+            <p><strong>Signals:</strong> ATR Expansion, Mean Reversion</p>
+          </div>
+          <div class="feature-card">
+            <span class="cloud-badge cloud-gmma">GMMA</span>
+            <h4>GMMA Cloud</h4>
+            <p><strong>Best for:</strong> All Markets</p>
+            <p><strong>Signals:</strong> EMA Separation, Trend Strength</p>
+          </div>
+        </div>
+
+        <h3>Cloud Signals</h3>
+        <p>Each cloud generates its own signal displayed on the chart:</p>
+        <div>
+          <span class="signal-box signal-buy">🟢 BUY</span>
+          <span class="signal-box signal-sell">🔴 SELL</span>
+          <span class="signal-box signal-wait">🟡 WAIT</span>
+        </div>
+
+        <div class="warning">
+          <strong>⚠️ Important:</strong> Enable only the clouds relevant to your
+          trading style. Using too many clouds can create conflicting signals.
+        </div>
+      </section>
+
+      <section id="pandas-ta">
+        <h2>5. Pandas-TA Indicators</h2>
+
+        <p>
+          Titan Pro includes 10 manually-calculated indicators from the
+          Pandas-TA library:
+        </p>
+
+        <table>
+          <tr>
+            <th>Indicator</th>
+            <th>Dashboard Label</th>
+            <th>Signals</th>
+          </tr>
+          <tr>
+            <td>Squeeze Pro</td>
+            <td>SQUEEZE: 🔴 ON / 🟢 OFF</td>
+            <td>Volatility compression before breakout</td>
+          </tr>
+          <tr>
+            <td>SuperTrend</td>
+            <td>STREND: ⬆ BUY / ⬇ SELL</td>
+            <td>Trend direction with ATR-based stops</td>
+          </tr>
+          <tr>
+            <td>Bollinger Bands</td>
+            <td>BB: 85%</td>
+            <td>%B position (0-100%)</td>
+          </tr>
+          <tr>
+            <td>VWAP</td>
+            <td>VWAP: ABOVE / BELOW</td>
+            <td>Price relative to volume-weighted average</td>
+          </tr>
+          <tr>
+            <td>StochRSI</td>
+            <td>StochRSI: 75 OB</td>
+            <td>Overbought (>80) / Oversold (<20)</td>
+          </tr>
+          <tr>
+            <td>Keltner Channels</td>
+            <td>(Part of cloud)</td>
+            <td>ATR-based volatility bands</td>
+          </tr>
+          <tr>
+            <td>Donchian Channel</td>
+            <td>(Part of cloud)</td>
+            <td>Highest high / Lowest low</td>
+          </tr>
+          <tr>
+            <td>ATR Bands</td>
+            <td>VOL: 388p</td>
+            <td>Volatility in pips</td>
+          </tr>
+          <tr>
+            <td>Williams %R</td>
+            <td>(Internal)</td>
+            <td>Momentum oscillator</td>
+          </tr>
+          <tr>
+            <td>Session Detection</td>
+            <td>(Internal)</td>
+            <td>London/NY/Asia session timing</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="dashboard">
+        <h2>6. Dashboard Guide</h2>
+
+        <p>
+          The Titan Pro dashboard provides real-time information in several
+          sections:
+        </p>
+
+        <h3>Left Panel - Technical Indicators</h3>
+        <table>
+          <tr>
+            <th>Field</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>H1: ⬆️+2.5p</td>
+            <td>H1 trend force in pips</td>
+          </tr>
+          <tr>
+            <td>RSI: 65</td>
+            <td>Relative Strength Index (OB/OS)</td>
+          </tr>
+          <tr>
+            <td>ADX: 28</td>
+            <td>Trend strength (>25 = strong)</td>
+          </tr>
+          <tr>
+            <td>VOL: 388p</td>
+            <td>ATR volatility in pips</td>
+          </tr>
+        </table>
+
+        <h3>Left Panel - Levels</h3>
+        <table>
+          <tr>
+            <th>Field</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>PP: 51.996</td>
+            <td>Daily Pivot Point</td>
+          </tr>
+          <tr>
+            <td>R1: 54.504</td>
+            <td>Resistance 1</td>
+          </tr>
+          <tr>
+            <td>S1: 48.056</td>
+            <td>Support 1</td>
+          </tr>
+        </table>
+
+        <h3>Right Panel - Trade Setup</h3>
+        <table>
+          <tr>
+            <th>Field</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>ENTRY</td>
+            <td>Suggested entry price</td>
+          </tr>
+          <tr>
+            <td>TARGET</td>
+            <td>Take profit level</td>
+          </tr>
+          <tr>
+            <td>STOP</td>
+            <td>Stop loss level</td>
+          </tr>
+          <tr>
+            <td>RR</td>
+            <td>Risk/Reward ratio</td>
+          </tr>
+        </table>
+
+        <h3>MTF Alignment</h3>
+        <p>Shows multi-timeframe trend alignment:</p>
+        <pre><code>MTF 3/4 SELL: M15⬇ M30⬇ H1⬇ H4⬆</code></pre>
+        <p>
+          The number indicates how many timeframes agree with the direction.
+        </p>
+      </section>
+
+      <section id="signals">
+        <h2>7. Signal Generation</h2>
+
+        <h3>Buy Signal Conditions</h3>
+        <ol>
+          <li>Price closed above HMA Tunnel top</li>
+          <li>MACD histogram is positive</li>
+          <li>Price is above Ichimoku cloud</li>
+          <li>Tenkan > Kijun (bullish)</li>
+          <li>MTF alignment ≥ 3/4</li>
+          <li>Not in dead trading hours</li>
+        </ol>
+
+        <h3>Sell Signal Conditions</h3>
+        <ol>
+          <li>Price closed below HMA Tunnel bottom</li>
+          <li>MACD histogram is negative</li>
+          <li>Price is below Ichimoku cloud</li>
+          <li>Tenkan < Kijun (bearish)</li>
+          <li>MTF alignment ≥ 3/4</li>
+          <li>Not in dead trading hours</li>
+        </ol>
+
+        <h3>Confirmation System</h3>
+        <p>
+          Signals require 2-3 consecutive bars of confirmation before displaying
+          as "CONFIRMED".
+        </p>
+      </section>
+
+      <section id="strategies">
+        <h2>8. Strategy Modes</h2>
+
+        <p>
+          Titan Pro automatically selects the optimal trading strategy based on
+          your chart timeframe. Each strategy has different holding times and
+          targets:
+        </p>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h4>⚡ SCALP (≤ M5)</h4>
+            <p><strong>Duration:</strong> 15 minutes</p>
+            <p>
+              <strong>Best for:</strong> Quick trades during high volatility
+            </p>
+            <p><strong>Target:</strong> Small pips, high frequency</p>
+          </div>
+          <div class="feature-card">
+            <h4>↩️ PULLBACK (M15-M30)</h4>
+            <p><strong>Duration:</strong> 1 hour</p>
+            <p><strong>Best for:</strong> Trading retracements in trends</p>
+            <p><strong>Target:</strong> Medium pips, moderate frequency</p>
+          </div>
+          <div class="feature-card">
+            <h4>💥 BREAKOUT (M30-H1)</h4>
+            <p><strong>Duration:</strong> 2 hours</p>
+            <p><strong>Best for:</strong> Trading range breakouts</p>
+            <p><strong>Target:</strong> Larger moves, lower frequency</p>
+          </div>
+          <div class="feature-card">
+            <h4>🌊 SWING (> H1)</h4>
+            <p><strong>Duration:</strong> 4+ hours</p>
+            <p><strong>Best for:</strong> Trend following positions</p>
+            <p><strong>Target:</strong> Major moves, position trading</p>
+          </div>
+        </div>
+
+        <h3>Dashboard Strategy Display</h3>
+        <p>
+          The dashboard shows all 4 strategies with their current status. The
+          active strategy (based on your timeframe) will show trade information
+          when a signal is active:
+        </p>
+        <pre><code>⚡ SCALP (15m):
+   ↑ ATIVO | ⏱️ 12:45
+   E:2765.50 → T:2768.00 (25p)
+
+💥 BREAKOUT (2h):
+   AGUARDANDO</code></pre>
+
+        <div class="tip">
+          <strong>💡 Tip:</strong> Match your chart timeframe to your trading
+          style. Use M15 for scalping, H1 for breakouts, H4 for swing trading.
+        </div>
+      </section>
+
+      <section id="ml-engines">
+        <h2>10. ML Adaptive Engines</h2>
+
+        <p>
+          Titan Pro includes 9 machine learning engines that adapt parameters
+          based on market conditions:
+        </p>
+
+        <table>
+          <tr>
+            <th>#</th>
+            <th>Engine</th>
+            <th>Function</th>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>ATR Threshold</td>
+            <td>Adjusts volatility filter dynamically</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>MTF Alignment</td>
+            <td>Switches between 3/4 and 4/4 requirements</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>RR Ratio</td>
+            <td>Adapts risk/reward between 1.5-2.5</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Tunnel Period</td>
+            <td>HMA period range 20-100</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Swing Strength</td>
+            <td>Pivot detection range 2-10</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>MACD Parameters</td>
+            <td>Fast/Slow/Standard modes</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Session Scheduler</td>
+            <td>Golden/Dead hours detection</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>Correlation</td>
+            <td>Multi-symbol bias (-1 to +1)</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>RSI Thresholds</td>
+            <td>Dynamic overbought/oversold levels</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="parameters">
+        <h2>9. Parameters Reference</h2>
+
+        <h3>Group 1: Market Profile</h3>
+        <table>
+          <tr>
+            <th>Parameter</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Profile</td>
+            <td>AutoDetect</td>
+            <td>Bitcoin/Gold/Indices/Forex</td>
+          </tr>
+        </table>
+
+        <h3>Group 6A: Ichimoku Cloud</h3>
+        <table>
+          <tr>
+            <th>Parameter</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Show Ichimoku Cloud</td>
+            <td>true</td>
+            <td>Enable/disable Ichimoku</td>
+          </tr>
+          <tr>
+            <td>Ichimoku Tenkan</td>
+            <td>9</td>
+            <td>Conversion line period</td>
+          </tr>
+          <tr>
+            <td>Ichimoku Kijun</td>
+            <td>26</td>
+            <td>Base line period</td>
+          </tr>
+          <tr>
+            <td>Ichimoku Senkou</td>
+            <td>52</td>
+            <td>Leading span period</td>
+          </tr>
+        </table>
+
+        <h3>Group 6B-6E: Other Clouds</h3>
+        <table>
+          <tr>
+            <th>Parameter</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Show Bollinger Cloud</td>
+            <td>false</td>
+            <td>Enable BB cloud</td>
+          </tr>
+          <tr>
+            <td>Show Donchian Cloud</td>
+            <td>false</td>
+            <td>Enable Donchian channel</td>
+          </tr>
+          <tr>
+            <td>Show Keltner Cloud</td>
+            <td>false</td>
+            <td>Enable Keltner channel</td>
+          </tr>
+          <tr>
+            <td>Show GMMA Cloud</td>
+            <td>false</td>
+            <td>Enable GMMA cloud</td>
+          </tr>
+        </table>
+
+        <h3>Group 6F: Cloud Intelligence</h3>
+        <table>
+          <tr>
+            <th>Parameter</th>
+            <th>Default</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>Auto-Adjust Cloud Params</td>
+            <td>true</td>
+            <td>Adapt to market profile</td>
+          </tr>
+          <tr>
+            <td>Show Cloud Signals</td>
+            <td>true</td>
+            <td>Display 🟢🔴🟡 labels</td>
+          </tr>
+          <tr>
+            <td>Hide Fibo When Clouds Active</td>
+            <td>true</td>
+            <td>Toggle Fibo/Clouds</td>
+          </tr>
+        </table>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>10. Troubleshooting</h2>
+
+        <h3>Dashboard shows "--" for all values</h3>
+        <p>
+          Wait for the indicator to calculate. The first few bars may show
+          placeholder values until enough data is available.
+        </p>
+
+        <h3>Cloud appears even when disabled</h3>
+        <p>
+          Make sure to set the "Show X Cloud" parameter to <code>false</code> in
+          the indicator settings. The indicator now properly respects all cloud
+          visibility settings.
+        </p>
+
+        <h3>Signals not appearing</h3>
+        <p>Check that:</p>
+        <ul>
+          <li>MTF alignment is sufficient (at least 3/4)</li>
+          <li>You're not in dead trading hours</li>
+          <li>Volatility is within normal range</li>
+        </ul>
+
+        <h3>Build errors</h3>
+        <p>
+          Ensure you're using the latest version of cTrader (4.0+) and that all
+          files are properly copied to the indicators folder.
+        </p>
+      </section>
+    </div>
+
+    <footer>
+      <p>📚 Titan Pro v2.7 - Cloud Intelligence Edition</p>
+      <p>© 2026 XAUUSD_cBot Project | All Rights Reserved</p>
+    </footer>
+  </body>
+</html>
